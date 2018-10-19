@@ -111,13 +111,21 @@ class ss2_collector(object):
     def collect(self):
         stats = self._gather_tcp_stats()
 
-        tcp_gauge = GaugeMetricFamily('tcp_rtt',
-                                      'tcp socket stats per flow latency[rtt]')
+        gauges = {
+                'rtt': GaugeMetricFamily('tcp_rtt',
+                                         'tcp socket stats per'
+                                         'flow latency[rtt]'),
+                'snd_cwnd':  GaugeMetricFamily('tcp_cwnd',
+                                               'tcp socket per'
+                                               'flow congestion window stats')
+                }
         for flow in stats['TCP']['flows']:
             key = self._form_metric_key(flow)
-            tcp_gauge.add_metric([key], flow['tcp_info']['rtt'])
+            for g_k, gauge in gauges.items():
+                gauge.add_metric([key], flow['tcp_info'][g_k])
 
-        yield tcp_gauge
+        for gauge in gauges.values():
+            yield gauge
 
 
 def setup_args():
