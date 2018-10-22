@@ -114,10 +114,12 @@ class ss2_collector(object):
         gauges = {
                 'rtt': GaugeMetricFamily('tcp_rtt',
                                          'tcp socket stats per'
-                                         'flow latency[rtt]'),
+                                         'flow latency[rtt]',
+                                         labels=['flow']),
                 'snd_cwnd':  GaugeMetricFamily('tcp_cwnd',
                                                'tcp socket per'
-                                               'flow congestion window stats')
+                                               'flow congestion window stats',
+                                               labels=['flow'])
                 }
         for flow in stats['TCP']['flows']:
             key = self._form_metric_key(flow)
