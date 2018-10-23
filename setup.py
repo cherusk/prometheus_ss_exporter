@@ -1,7 +1,7 @@
 from setuptools import setup, find_packages
 
 setup(
-    name='prometheus-couchbase-exporter',
+    name='prometheus-ss-exporter',
 
     version='1.0.0',
 
@@ -31,7 +31,7 @@ setup(
         'ss2'
     ],
 
-    packages=find_packages(exclude=['contrib', 'docs', 'tests']),
+    packages=find_packages(),
 
     install_requires=[
         'pyroute2',
