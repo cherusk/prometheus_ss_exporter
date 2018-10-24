@@ -24,6 +24,7 @@
 
 from prometheus_client import start_http_server
 from prometheus_client.core import (GaugeMetricFamily,
+                                    HistogramMetricFamily,
                                     REGISTRY)
 import json
 import sys
@@ -34,6 +35,7 @@ import re
 import io
 import collections
 import argparse
+import bisect
 
 
 class Utils:
@@ -58,7 +60,31 @@ class Utils:
         if fail:
             raise RuntimeError("No %s binary found in PATH." % executable)
 
-#class flow_keep():
+
+class bucket_keep(object):
+    _INF = "+Inf"
+
+    def __init__(self, bounds):
+        self.values = [0 for _ in bounds]
+        self.bucket_bounds = bounds
+
+    def _incr(self, idx):
+        self.values[idx] = self.values[idx] + 1
+
+    def enter(self, sample):
+        idx = bisect.bisect(self.bucket_bounds, sample)
+        self._incr(idx)
+
+    def reveal(self):
+        count = len(self.values) + 1
+        sum_vals = sum(self.values) + count
+
+        buckets = [[str(bound), val]
+                   for bound, val
+                   in zip(self.bucket_bounds, self.values)]
+        buckets.append([self._INF, count])
+
+        return buckets, sum_vals
 
 
 class ss2_collector(object):
@@ -66,6 +92,15 @@ class ss2_collector(object):
     def __init__(self, args):
         ss2_script = Utils.which('ss2')
         self.ss2 = imp.load_source('ss2', ss2_script)
+        self._dflt_bounds = [.10,
+                             .50,
+                             1.00,
+                             5.00,
+                             10.00,
+                             50.00,
+                             100.00,
+                             200.00,
+                             500.00]
         self._reset_io()
 
     def _reset_io(self):
@@ -121,13 +156,30 @@ class ss2_collector(object):
                                                'flow congestion window stats',
                                                labels=['flow'])
                 }
+        hists = {
+                'rtt': {
+                        'family': HistogramMetricFamily('tcp_rtt_hist',
+                                                        'tcp flows'
+                                                        'latency outline',
+                                                        unit='ms'),
+                        'buckets': bucket_keep(self._dflt_bounds)
+                        }
+                }
         for flow in stats['TCP']['flows']:
             key = self._form_metric_key(flow)
             for g_k, gauge in gauges.items():
                 gauge.add_metric([key], flow['tcp_info'][g_k])
 
+            for h_k, histo in hists.items():
+                histo['buckets'].enter(flow['tcp_info'][h_k])
+
         for gauge in gauges.values():
             yield gauge
+
+        for h_k, histo in hists.items():
+            buckets, _sum = histo['buckets'].reveal()
+            histo['family'].add_metric([], buckets, _sum)
+            yield histo['family']
 
 
 def setup_args():
