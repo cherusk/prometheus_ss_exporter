@@ -1,0 +1,43 @@
+---
+
+cnfg:
+    #>> Mandatory
+    logic:
+        histograms:
+            active: True
+            latency: 
+                active: True 
+                bucket_bounds: # ms
+                            - .10
+                            - .50
+                            - 1.00
+                            - 5.00
+                            - 10.00
+                            - 50.00
+                            - 100.00
+                            - 200.00
+                            - 500.00
+        gauges:
+            active: True
+            rtt:
+                active: True 
+            cwnd:
+                active: True 
+        flow_label:
+            origin_folding: "raw_endpoint" # or "pid_condensed"
+    #<<<<<<<<<<<<<<<<<<<<<<<<<<
+    selection:
+        # uncomment for usage 
+        #pids:
+            #- 200
+            #- 1500
+        #cmds:
+            #- "firefox"
+        #nodes: 
+        #   ips:
+            #- "8.8.4.4"
+        #   hosts:
+            #- "some.de"
+        #portranges:
+            #- lower: 2000 
+              #upper: 10000
