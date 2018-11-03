@@ -37,6 +37,7 @@ import argparse
 import bisect
 import yaml
 import ipaddress as ip_a
+import logging
 
 
 class Utils:
@@ -150,11 +151,16 @@ class ss2_collector(object):
 
     def _form_pid_condensed_metric_key(self, flow):
         pids = []
-        for usr, pid_ctxt in flow['usr_ctxt'].items():
-            pids.extend(pid_ctxt.keys())
-        key = "(%s)(DST#%s|%s)" % (",".join(pids),
-                                   flow['dst'],
-                                   flow['dst_port'])
+        key = ""
+        try:
+            for usr, pid_ctxt in flow['usr_ctxt'].items():
+                    pids.extend(pid_ctxt.keys())
+            key = "(%s)(DST#%s|%s)" % (",".join(pids),
+                                       flow['dst'],
+                                       flow['dst_port'])
+        except KeyError:
+            logging.error("Error: Lacking usr_ctxt \n Flow: %s", flow)
+
         return key
 
     def _stage_metrics(self):
@@ -229,11 +235,14 @@ class ss2_collector(object):
 
     def consume_sample(self, flow):
         key = self._form_flow_key(flow)
-        for g_k, gauge in self.gauges.items():
-            gauge.add_metric([key], flow['tcp_info'][g_k])
+        try:
+            for g_k, gauge in self.gauges.items():
+                gauge.add_metric([key], flow['tcp_info'][g_k])
 
-        for h_k, histo in self.hists.items():
-            histo['buckets'].enter(flow['tcp_info'][h_k])
+            for h_k, histo in self.hists.items():
+                    histo['buckets'].enter(flow['tcp_info'][h_k])
+        except KeyError as e:
+            logging.error("Flow: %s\n Cause: %s\n", flow, e)
 
     def collect(self):
         stats = self._gather_tcp_stats()
