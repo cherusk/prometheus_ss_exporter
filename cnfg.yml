@@ -24,7 +24,10 @@ cnfg:
             cwnd:
                 active: True 
         flow_label:
-            origin_folding: "raw_endpoint" # or "pid_condensed"
+            origin_folding: "raw_endpoint" 
+                            # Shape Outline:
+                            # raw_endpoint: flow="(SRC#192.168.10.58|39366)(DST#104.19.199.151|443)" 
+                            # pid_condensed: flow="(20005)(DST#172.217.18.2|443)"
     #<<<<<<<<<<<<<<<<<<<<<<<<<<
     selection:
         # uncomment for usage 
