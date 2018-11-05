@@ -202,6 +202,25 @@ class ss2_collector(object):
                                                                  'flow delivery rate',
                                                                  labels=['flow'],
                                                                  unit='bytes')
+        self.counters = {}
+        c_cnfg = (self.cnfg['logic']
+                           ['counters'])
+        if (c_cnfg['active']):
+            if (c_cnfg['data_segs_in']['active']):
+                self.counters['data_segs_in'] = CounterMetricFamily('tcp_data_segs_in',
+                                                                    'tcp per'
+                                                                    'flow received'
+                                                                    'data segments',
+                                                                    labels=['flow'],
+                                                                    unit='segments')
+
+            if (c_cnfg['data_segs_out']['active']):
+                self.counters['data_segs_out'] = CounterMetricFamily('tcp_data_segs_out',
+                                                                     'tcp per'
+                                                                     'flow received'
+                                                                     'data segments',
+                                                                     labels=['flow'],
+                                                                     unit='segments')
 
     def is_selected(self, flow):
 

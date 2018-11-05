@@ -25,6 +25,11 @@ cnfg:
                 active: True 
             delivery_rate:
                 active: True 
+        counters:
+            data_segs_in:
+                active: True
+            data_segs_out:
+                active: True
         flow_label:
             origin_folding: "raw_endpoint" 
                             # Shape Outline:
