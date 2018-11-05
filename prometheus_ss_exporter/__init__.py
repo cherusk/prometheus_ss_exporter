@@ -196,6 +196,13 @@ class ss2_collector(object):
                                                             'window stats',
                                                             labels=['flow'])
 
+            if g_cnfg['delivery_rate']['active']:
+                self.gauges['delivery_rate'] = GaugeMetricFamily('tcp_delivery_rate',
+                                                                 'tcp socket per'
+                                                                 'flow delivery rate',
+                                                                 labels=['flow'],
+                                                                 unit='bytes')
+
     def is_selected(self, flow):
 
         targeted = self.cnfg['selection']
