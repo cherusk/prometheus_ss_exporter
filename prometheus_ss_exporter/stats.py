@@ -1,4 +1,12 @@
 
+import collections
+import utils
+import sys
+import imp
+import io
+import json
+
+
 class Gatherer:
     def __init__(self):
         self._load_logic()
@@ -46,28 +54,27 @@ class Gatherer:
 class Condenser:
 
     def __init__(self, cnfg):
-        self._form_flow_key = getattr(self, "_form_%s_metric_key" %
-                                            cnfg['logic']
-                                            ['flow_label']
-                                            ['origin_folding'])
+        attr = "_form_{0}_metric_key".format(cnfg['logic']
+                                                 ['compression']
+                                                 ['label_folding']
+                                                 ['origin'])
+        self._former = getattr(self, attr)
 
     def _form_raw_endpoint_metric_key(self, flow):
-        key = "(SRC#%s|%s)(DST#%s|%s)" % (flow['src'],
-                                          flow['src_port'],
-                                          flow['dst'],
-                                          flow['dst_port'])
+        key = "(SRC#{src}|{src_port})(DST#{dst}|{dst_port})".format(**flow)
         return key
 
     def _form_pid_condensed_metric_key(self, flow):
-        pids = []
-        key = ""
         try:
+            pids = list()
             for usr, pid_ctxt in flow['usr_ctxt'].items():
-                    pids.extend(pid_ctxt.keys())
-            key = "(%s)(DST#%s|%s)" % (",".join(pids),
-                                       flow['dst'],
-                                       flow['dst_port'])
+                pids.extend(pid_ctxt.keys())
+            key = "({0})(DST#{dst}|{dst_port})".format(",".join(pids))
+            key = key.format(**flow)
         except KeyError:
             logging.error("Error: Lacking usr_ctxt \n Flow: %s", flow)
 
         return key
+
+    def shape_key(self, flow):
+        return self._former(flow)

@@ -24,16 +24,12 @@
 
 from prometheus_client import start_http_server
 from prometheus_client.core import (REGISTRY)
-import json
 import sys
 import imp
 import time
-import io
-import collections
 import argparse
 import yaml
 import logging
-import utils
 import stats
 import selection
 import keep
@@ -49,16 +45,14 @@ class ss2_collector(object):
     def collect(self):
         stats = self.gather.provide_tcp_stats()
 
-        self._stage_metrics()
-
         for flow in stats['TCP']['flows']:
             if self.selector.arbitrate(flow):
                 self.metrics.consume_sample(flow)
 
-        for gauge in self.gauges.values():
+        for gauge in self.metrics.gauges.values():
             yield gauge
 
-        for h_k, histo in self.hists.items():
+        for histo in self.metrics.hists.values():
             buckets, _sum = histo['buckets'].reveal()
             histo['family'].add_metric([], buckets, _sum)
             yield histo['family']

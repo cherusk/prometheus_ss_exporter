@@ -31,14 +31,14 @@ logic:
             data_segs_out:
                 active: True
     compression:
-        flow_label:
-            origin_folding: "raw_endpoint" 
+        label_folding:
+            origin: "pid_condensed"
             # Shape Outline:
             # raw_endpoint: flow="(SRC#192.168.10.58|39366)(DST#104.19.199.151|443)" 
             # pid_condensed: flow="(20005)(DST#172.217.18.2|443)"
     #<<<<<<<<<<<<<<<<<<<<<<<<<<
+    # uncomment for usage 
     selection:
-        # uncomment for usage 
         #process:
             #pids:
                 #- 200
@@ -47,7 +47,7 @@ logic:
                 #- "firefox"
         #stack:
             #nodes: 
-            #   ips:
+            #   addresses:
                 #- "8.8.4.4"
             #   hosts:
                 #- "some.de"
