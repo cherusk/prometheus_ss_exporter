@@ -1,8 +1,8 @@
 ---
 
-cnfg:
-    #>> Mandatory
-    logic:
+#>> Mandatory
+logic:
+    metrics:
         histograms:
             active: True
             latency: 
@@ -30,24 +30,27 @@ cnfg:
                 active: True
             data_segs_out:
                 active: True
+    compression:
         flow_label:
             origin_folding: "raw_endpoint" 
-                            # Shape Outline:
-                            # raw_endpoint: flow="(SRC#192.168.10.58|39366)(DST#104.19.199.151|443)" 
-                            # pid_condensed: flow="(20005)(DST#172.217.18.2|443)"
+            # Shape Outline:
+            # raw_endpoint: flow="(SRC#192.168.10.58|39366)(DST#104.19.199.151|443)" 
+            # pid_condensed: flow="(20005)(DST#172.217.18.2|443)"
     #<<<<<<<<<<<<<<<<<<<<<<<<<<
     selection:
         # uncomment for usage 
-        #pids:
-            #- 200
-            #- 1500
-        #cmds:
-            #- "firefox"
-        #nodes: 
-        #   ips:
-            #- "8.8.4.4"
-        #   hosts:
-            #- "some.de"
-        #portranges:
-            #- lower: 2000 
-              #upper: 10000
+        #process:
+            #pids:
+                #- 200
+                #- 1500
+            #cmds:
+                #- "firefox"
+        #stack:
+            #nodes: 
+            #   ips:
+                #- "8.8.4.4"
+            #   hosts:
+                #- "some.de"
+            #portranges:
+                #- lower: 2000 
+                  #upper: 10000
