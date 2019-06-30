@@ -7,13 +7,14 @@ python:
 # consider docker
 install:
     - make
-install:
-      - pip install nose2
+    - pip install nose2
+    - python3 setup.py install
 jobs:
   include:
      - stage: Testing
        script: 
            - make test
+           - prometheus_ss_exporter
      - stage: Publish
        script: 'echo Commencing'
        #deploy:

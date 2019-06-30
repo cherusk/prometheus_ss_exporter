@@ -95,7 +95,6 @@ def main():
     try:
         args = setup_args()
         cnfg = setup_cnfg(args.cnfg)
-        print cnfg
         port = int(args.port)
         REGISTRY.register(ss2_collector(args, cnfg))
         start_http_server(port)
