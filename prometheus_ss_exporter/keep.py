@@ -21,11 +21,12 @@
 # SOFTWARE.
 
 
-import bisect
 from prometheus_client.core import (GaugeMetricFamily,
                                     HistogramMetricFamily,
                                     CounterMetricFamily)
-import stats
+import logging
+import bisect
+from . import stats
 
 
 class BucketKeep(object):
@@ -57,17 +58,18 @@ class BucketKeep(object):
 class MetricsKeep:
 
     def __init__(self, cnfg):
-        self.condense = stats.Condenser(cnfg)
+        self.condenser = stats.Condenser(cnfg)
         self._stage(cnfg)
 
     def _stage(self, cnfg):
+        metrics_cnfg = cnfg['logic']['metrics']
         for aspect in ['histograms',
                        'gauges',
                        'counters']:
-            if cnfg['logic'][aspect]['active']:
+            if metrics_cnfg[aspect]['active']:
                 stager = getattr(self,
                                  "_stage_{0}".format(aspect))
-                stager(cnfg['logic'][aspect])
+                stager(metrics_cnfg[aspect])
 
     def _stage_histograms(self, cnfg):
         self.hists = dict()

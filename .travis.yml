@@ -8,13 +8,17 @@ python:
 install:
     - make
     - pip install nose2
+    # interim ss2 until issue  #616 resolution
+    - git clone https://github.com/cherusk/pyroute2.git
+    - cd pyroute2; python3 setup.py install; cd ..
+    ### 
     - python3 setup.py install
 jobs:
   include:
      - stage: Testing
        script: 
            - make test
-           - prometheus_ss_exporter
+           - timeout 10 prometheus_ss_exporter -c ./cnfg.yml; exit 0
      - stage: Publish
        script: 'echo Commencing'
        #deploy:

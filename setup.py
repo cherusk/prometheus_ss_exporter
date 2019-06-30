@@ -35,7 +35,9 @@ setup(
 
     install_requires=[
         'pyroute2',
-        'prometheus-client'
+        'prometheus-client',
+        'PyYAML',
+        'psutil'
     ],
 
     entry_points={

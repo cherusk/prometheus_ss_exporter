@@ -1,10 +1,14 @@
 
 import collections
-import utils
 import sys
-import imp
 import io
 import json
+import logging
+
+
+import importlib.machinery
+
+from . import utils
 
 
 class Gatherer:
@@ -26,8 +30,11 @@ class Gatherer:
         self.args.unix = False
 
     def _load_logic(self):
-        ss2_script = utils.which('ss2')
-        self.ss2 = imp.load_source('ss2', ss2_script)
+        ss2_script_path = utils.which('ss2')
+        self.ss2 = (importlib.
+                    machinery.
+                    SourceFileLoader('ss2',
+                                     ss2_script_path).load_module())
 
     def _reset_io(self):
         if sys.version_info[0] == 2:
@@ -65,6 +72,7 @@ class Condenser:
         return key
 
     def _form_pid_condensed_metric_key(self, flow):
+        key = None
         try:
             pids = list()
             for usr, pid_ctxt in flow['usr_ctxt'].items():

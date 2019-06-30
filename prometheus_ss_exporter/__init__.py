@@ -24,23 +24,21 @@
 
 from prometheus_client import start_http_server
 from prometheus_client.core import (REGISTRY)
-import sys
-import imp
 import time
 import argparse
 import yaml
-import logging
-import stats
-import selection
-import keep
+import os
+from . import selection
+from . import keep
+from . import stats
 
 
 class ss2_collector(object):
 
     def __init__(self, args, cnfg):
         self.gather = stats.Gatherer()
-        self.selector = Selector(cnfg)
-        self.metrics = MetricsKeep(cnfg)
+        self.selector = selection.Selector(cnfg)
+        self.metrics = keep.MetricsKeep(cnfg)
 
     def collect(self):
         stats = self.gather.provide_tcp_stats()
@@ -77,7 +75,7 @@ def setup_args():
         type=str,
         help='Exporter config file',
         default=os.path.join(os.path.dirname(os.path.realpath(__file__)),
-                             "../cnfg.yml")
+                             "./cnfg.yml")
     )
 
     return parser.parse_args()
@@ -88,7 +86,7 @@ def setup_cnfg(_file):
     with open(_file, "r") as cnfg_f:
         cnfg = yaml.load(cnfg_f)
 
-    return cnfg['cnfg']
+    return cnfg
 
 
 def main():

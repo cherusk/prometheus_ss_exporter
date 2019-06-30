@@ -26,6 +26,7 @@ logic:
             delivery_rate:
                 active: True 
         counters:
+            active: True
             data_segs_in:
                 active: True
             data_segs_out:

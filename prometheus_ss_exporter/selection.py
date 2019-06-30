@@ -43,7 +43,9 @@ class Selector:
                     return False
 
     def __init__(self, cnfg):
-        if cnfg['selection']:
+        key = 'selection'
+        if (key in cnfg.keys() and
+           cnfg[key]):
             self._core = self._arbitrate
             self.cnfg = cnfg['selection']
         else:
