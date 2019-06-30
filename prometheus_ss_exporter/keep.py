@@ -36,23 +36,28 @@ class BucketKeep(object):
         self.values = [0 for _ in bounds]
         self.bucket_bounds = bounds
 
-    def _incr(self, idx):
-        self.values[idx] = self.values[idx] + 1
+        self.outlier_thresh = self.bucket_bounds[-1]
+        self.outlier_count = 0
 
     def enter(self, sample):
+        if sample > self.outlier_thresh:
+            self.outlier_count += 1
+            return
+
         idx = bisect.bisect(self.bucket_bounds, sample)
-        self._incr(idx)
+        self.values[idx] += 1
 
     def reveal(self):
-        count = len(self.values) + 1
-        sum_vals = sum(self.values) + count
+        sum_vals = sum(self.values)
+        count = sum([sum_vals, self.outlier_count, 1])
 
         buckets = [[str(bound), val]
                    for bound, val
                    in zip(self.bucket_bounds, self.values)]
         buckets.append([self._INF, count])
 
-        return buckets, sum_vals
+        sum_all = sum_vals + count
+        return buckets, sum_all
 
 
 class MetricsKeep:

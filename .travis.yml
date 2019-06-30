@@ -15,9 +15,10 @@ install:
     - python3 setup.py install
 jobs:
   include:
-     - stage: Testing
+     - stage: Functional Testing
        script: 
            - make test
+     - stage: Integration Testing
            - timeout 10 prometheus_ss_exporter -c ./cnfg.yml; exit 0
      - stage: Publish
        script: 'echo Commencing'
@@ -29,8 +30,10 @@ jobs:
            #api_key: "GITHUB OAUTH TOKEN"
            #file: "FILE TO UPLOAD"
 stages:
-    - name: Testing
+    - name: Functional Testing
       if: branch = devel 
+    - name: 
+      if: branch = master 
     - name: Publish
       if: branch = master
 
