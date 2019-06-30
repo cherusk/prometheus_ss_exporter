@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.com/cherusk/prometheus_ss_exporter.svg?branch=master)](https://travis-ci.com/cherusk/prometheus_ss_exporter)
+
 # prometheus_ss_exporter
 
 Flows|Socket Statistics offering Exporter
@@ -7,7 +9,9 @@ Flows|Socket Statistics offering Exporter
 Although the label space for individual flows is bounded by the underlying flowing constraints configured on kernel level, for certain highly dynamic flowing patterns in short amounts of times this exporter is infringing the recommendation not to utitilze an "open" or potentially gargantuan label spaces deliberately one therefore should consider following options depending on the specific granularity requirements and resources at hand. 
 
 + The --storage.tsdb.retention=<x> option of the prometheus server to give bounds to the metrics label data held available can relieve capacity constraints significantly. Nigh it's not necessarily confined to ad-hoc introspection employments, when one is apt at forming a distinct retention (sub)hierarchy of servers, maybe within a prometheus federation.
-+ To further deplete the flow metrics lable cardinality, the config of the exporter offers a selection facility, skimm the **selection** section and the label folding **origin_folding** setting.
++ To further deplete the flow metrics lable cardinality, use the config of the exporter:
+..+ Skimm the **selection** section and for choosing the set of flows of interest.
+..+ Wield the label folding **origin_folding** setting.
 
 
 # Example Sample
