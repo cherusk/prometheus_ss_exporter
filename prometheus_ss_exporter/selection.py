@@ -8,39 +8,45 @@ class Selector:
         def ports(self, flow, portranges):
             for p_range in portranges:
                 if ((flow['dst_port'] < p_range['lower']) or
-                   (flow['dst_port'] > p_range['lower'])):
+                   (flow['dst_port'] > p_range['upper'])):
                     return False
             return True
 
         def peers(self, flow,
-                 hosts=None, addresses=None):
-            dst_ip = ip_a.ip_address(flow['dst'])
-            for node in addresses:
-                try:
-                    if ip_a.ipaddress(node) == dst_ip:
-                        return True
-                except TypeError:
-                    # alludes version discrepancy
-                    pass
+                  hosts=[], addresses=[]):
+            if addresses:
+                dst_ip = ip_a.ip_address(flow['dst'])
+                for node in addresses:
+                    try:
+                        if ip_a.ip_address(node) == dst_ip:
+                            return True
+                    except TypeError:
+                        # alludes version discrepancy
+                        pass
             # deliberatly 'simplified' comparison
-            if flow['dst_host'] not in hosts:
-                return False
+            if hosts:
+                if flow['dst_host'] in hosts:
+                    return True
+
+            return False
 
         def process(self, flow,
-                    pids=None, cmds=None):
+                    pids=[], cmds=[]):
             flow_pids = []
             flow_cmds = []
             for usr, pid_ctxt in flow['usr_ctxt'].items():
-                flow_pids.extend(pid_ctxt.keys())
-                flow_cmds.append(pid_ctxt['full_cmd'])
+                for pid, cmd_ctxt in pid_ctxt.items():
+                    flow_pids.append(pid)
+                    flow_cmds.append(cmd_ctxt['full_cmd'])
 
             for pid in pids:
-                if pid not in flow_pids:
-                    return False
+                if pid in flow_pids:
+                    return True
 
             for cmd in cmds:
-                if cmd not in flow_cmds:
-                    return False
+                if cmd in flow_cmds:
+                    return True
+            return False
 
     def __init__(self, cnfg):
         key = 'selection'

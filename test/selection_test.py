@@ -21,7 +21,7 @@ class SelectorTesting(unittest.TestCase):
         flow = {'dst_host': 'test.root.org'}
         outcome = SelectorTesting.discerner.peers(flow,
                                                   hosts=selector_hosts)
-        self.assertTrue(outcome)
+        self.assertFalse(outcome)
 
     def test_peers_accept_test(self):
         selector_addr = ["2003:f1:e3cc:1966:feaa:14ff:fe1c:5dea"]
@@ -32,7 +32,7 @@ class SelectorTesting(unittest.TestCase):
         self.assertTrue(outcome)
 
         selector_hosts = ["test.leave.org"]
-        flow = {'dst_host': 'test.org'}
+        flow = {'dst_host': 'test.leave.org'}
         outcome = SelectorTesting.discerner.peers(flow,
                                                   hosts=selector_hosts)
         self.assertTrue(outcome)
@@ -40,39 +40,39 @@ class SelectorTesting(unittest.TestCase):
     def test_port_decline_test(self):
         selector_range = [{'lower': 1000, 'upper': 2000}]
         flow = {'dst_port': 100}
-        outcome = SelectorTesting.discerner.port(flow,
-                                                 portranges=selector_range)
+        outcome = SelectorTesting.discerner.ports(flow,
+                                                  portranges=selector_range)
         self.assertFalse(outcome)
 
     def test_port_accept_test(self):
         selector_range = [{'lower': 1000, 'upper': 2000}]
         flow = {'dst_port': 1500}
-        outcome = SelectorTesting.discerner.port(flow,
-                                                 portranges=selector_range)
+        outcome = SelectorTesting.discerner.ports(flow,
+                                                  portranges=selector_range)
         self.assertTrue(outcome)
 
     def test_process_decline_test(self):
         selector_pids = [100]
-        flow = {'usr_ctxt': {101: {}}}
-        outcome = SelectorTesting.discerner.port(flow,
-                                                 pids=selector_pids)
+        flow = {'usr_ctxt': {'other_bin': {101: {'full_cmd': 'other'}}}}
+        outcome = SelectorTesting.discerner.process(flow,
+                                                    pids=selector_pids)
         self.assertFalse(outcome)
 
         selector_cmds = ['server']
-        flow = {'usr_ctxt': {101: {'full_cmd': 'other'}}}
-        outcome = SelectorTesting.discerner.port(flow,
-                                                 cmds=selector_cmds)
+        flow = {'usr_ctxt': {'other_bin': {101: {'full_cmd': 'other'}}}}
+        outcome = SelectorTesting.discerner.process(flow,
+                                                    cmds=selector_cmds)
         self.assertFalse(outcome)
 
     def test_process_accept_test(self):
         selector_pids = [100]
-        flow = {'usr_ctxt': {100: {}}}
-        outcome = SelectorTesting.discerner.port(flow,
-                                                 pids=selector_pids)
+        flow = {'usr_ctxt': {'server': {100: {'full_cmd': 'server'}}}}
+        outcome = SelectorTesting.discerner.process(flow,
+                                                    pids=selector_pids)
         self.assertTrue(outcome)
 
         selector_cmds = ['server']
-        flow = {'usr_ctxt': {101: {'full_cmd': 'server'}}}
-        outcome = SelectorTesting.discerner.port(flow,
-                                                 cmds=selector_cmds)
+        flow = {'usr_ctxt': {'server': {101: {'full_cmd': 'server'}}}}
+        outcome = SelectorTesting.discerner.process(flow,
+                                                    cmds=selector_cmds)
         self.assertTrue(outcome)
