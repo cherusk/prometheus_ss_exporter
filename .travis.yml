@@ -19,7 +19,9 @@ jobs:
        script: 
            - make test
      - stage: Integration Testing
-           - timeout 10 prometheus_ss_exporter -c ./cnfg.yml; exit 0
+       script: 
+           - timeout 10 prometheus_ss_exporter -c ./cnfg.yml
+           - exit 0
      - stage: Publish
        script: 'echo Commencing'
        #deploy:
@@ -32,7 +34,7 @@ jobs:
 stages:
     - name: Functional Testing
       if: branch = devel 
-    - name: 
+    - name: Integration Testing
       if: branch = master 
     - name: Publish
       if: branch = master
