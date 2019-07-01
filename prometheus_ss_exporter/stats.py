@@ -77,8 +77,9 @@ class Condenser:
             pids = list()
             for usr, pid_ctxt in flow['usr_ctxt'].items():
                 pids.extend(pid_ctxt.keys())
-            key = "({0})(DST#{dst}|{dst_port})".format(",".join(pids))
-            key = key.format(**flow)
+            key_suffix = "(DST#{dst}|{dst_port})".format(**flow)
+            key = "({0}){1}".format(",".join(pids),
+                                    key_suffix)
         except KeyError:
             logging.error("Error: Lacking usr_ctxt \n Flow: %s", flow)
 
