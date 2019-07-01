@@ -12,7 +12,7 @@ class Selector:
                     return False
             return True
 
-        def node(self, flow,
+        def peers(self, flow,
                  hosts=None, addresses=None):
             dst_ip = ip_a.ip_address(flow['dst'])
             for node in addresses:
@@ -59,9 +59,9 @@ class Selector:
 
     def _arbitrate(self, flow):
         conditions = [self.discern.ports(flow, self.cnfg['stack']['portranges']),
-                      self.discern.node(flow,
-                                        hosts=self.cnfg['stack']['nodes']['hosts'],
-                                        addresses=self.cnfg['stack']['nodes']['addresses']),
+                      self.discern.peers(flow,
+                                         hosts=self.cnfg['stack']['nodes']['hosts'],
+                                         addresses=self.cnfg['stack']['nodes']['addresses']),
                       self.discern.process(flow,
                                            pids=self.cnfg['process']['pids'],
                                            cmds=self.cnfg['process']['cmds'])

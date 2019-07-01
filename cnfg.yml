@@ -47,7 +47,7 @@ logic:
             #cmds:
                 #- "firefox"
         #stack:
-            #nodes: 
+            #peers: 
             #   addresses:
                 #- "8.8.4.4"
             #   hosts:
