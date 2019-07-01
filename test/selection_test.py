@@ -9,7 +9,7 @@ class SelectorTesting(unittest.TestCase):
     def setUpClass(cls):
         cls.discerner = selection.Selector.Discerner()
 
-    def peers_decline_test(self):
+    def test_peers_decline(self):
         selector_addr = ["10.0.1.10"]
         flow = {'dst': '91.189.92.41'}
 
@@ -23,7 +23,7 @@ class SelectorTesting(unittest.TestCase):
                                                   hosts=selector_hosts)
         self.assertTrue(outcome)
 
-    def peers_accept_test(self):
+    def test_peers_accept_test(self):
         selector_addr = ["2003:f1:e3cc:1966:feaa:14ff:fe1c:5dea"]
         flow = {'dst': '2003:f1:e3cc:1966:feaa:14ff:fe1c:5dea'}
 
@@ -37,21 +37,21 @@ class SelectorTesting(unittest.TestCase):
                                                   hosts=selector_hosts)
         self.assertTrue(outcome)
 
-    def port_decline_test(self):
+    def test_port_decline_test(self):
         selector_range = [{'lower': 1000, 'upper': 2000}]
         flow = {'dst_port': 100}
         outcome = SelectorTesting.discerner.port(flow,
                                                  portranges=selector_range)
         self.assertFalse(outcome)
 
-    def port_accept_test(self):
+    def test_port_accept_test(self):
         selector_range = [{'lower': 1000, 'upper': 2000}]
         flow = {'dst_port': 1500}
         outcome = SelectorTesting.discerner.port(flow,
                                                  portranges=selector_range)
         self.assertTrue(outcome)
 
-    def process_decline_test(self):
+    def test_process_decline_test(self):
         selector_pids = [100]
         flow = {'usr_ctxt': {101: {}}}
         outcome = SelectorTesting.discerner.port(flow,
@@ -64,7 +64,7 @@ class SelectorTesting(unittest.TestCase):
                                                  cmds=selector_cmds)
         self.assertFalse(outcome)
 
-    def process_accept_test(self):
+    def test_process_accept_test(self):
         selector_pids = [100]
         flow = {'usr_ctxt': {100: {}}}
         outcome = SelectorTesting.discerner.port(flow,
