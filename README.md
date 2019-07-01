@@ -60,12 +60,12 @@ tcp_rtt_hist_ms_sum 24.0
 
 # Hints 
 
-Although the label space for individual flows is bounded by the underlying flowing constraints configured on kernel level, for certain highly dynamic flowing patterns in short amounts of times this exporter is infringing the recommendation not to utitilze an "open" or potentially gargantuan label spaces deliberately one therefore should consider following options depending on the specific granularity requirements and resources at hand. 
+Although the label space for individual flows is bounded by the underlying flowing constraints configured on kernel level, for certain, highly dynamic traffic flow patterns this exporter is infringing the recommendation as not to employ an "open" and so potentially gargantuan label spaces. That also holds for short amounts of times. Hence, one should deliberately consider following options depending on the specific granularity requirements and resources at hand. 
 
-+ The --storage.tsdb.retention=<x> option of the prometheus server to give bounds to the metrics label data held available can relieve capacity constraints significantly. Nigh it's not necessarily confined to ad-hoc introspection employments, when one is apt at forming a distinct retention (sub)hierarchy of servers, maybe within a prometheus federation.
-+ To further deplete the flow metrics lable cardinality, use the config of the exporter:
-..+ Skimm the **selection** section and for choosing the set of flows of interest.
-..+ Wield the label folding **origin_folding** setting.
+Apparent mitigation tactics are:
++ The --storage.tsdb.retention=<yours> option of the prometheus server to give bounds to the metrics label data held available can relieve capacity constraints significantly. Nigh this is not necessarily confined to ad-hoc oriented introspection employments. That's holding equally on vaster scale, e.g. when one is apt at forming a distinct retention (sub)hierarchy of servers, maybe within a set of prometheus federations.
++ To further deplete the flow metrics lable cardinality, use the data selection configration aspects of the exporter:
+..+ Practically, skimm the **selection** section and for choosing the set of flows of interest.
 
 # Install
 
