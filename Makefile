@@ -9,7 +9,7 @@ all:
 	@echo \* test -- trigger testing
 
 .PHONY: test
-test: 
+test:
 	${NOSE} --verbose --config ./test/nose2.cfg
 
 
