@@ -27,6 +27,7 @@ from prometheus_client.core import (REGISTRY)
 import time
 import argparse
 import yaml
+from yaml import Loader
 import os
 from . import selection
 from . import keep
@@ -84,7 +85,7 @@ def setup_args():
 def setup_cnfg(_file):
 
     with open(_file, "r") as cnfg_f:
-        cnfg = yaml.load(cnfg_f)
+        cnfg = yaml.load(cnfg_f, Loader=Loader)
 
     return cnfg
 
