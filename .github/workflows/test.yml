@@ -45,5 +45,5 @@ jobs:
           python -m pip install --upgrade pip nose2 pyroute2
       - name: Test
         run: |
-          make test
+          nose2 --verbose --config ./test/nose2.cfg
 
