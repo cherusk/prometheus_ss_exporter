@@ -7,13 +7,13 @@ import logging
 
 
 import importlib.machinery
+import pyroute2.netlink.diag.ss2 as ss2
 
 from . import utils
 
 
 class Gatherer:
     def __init__(self):
-        self._load_logic()
         self._reset_io()
 
         self.args = collections.namedtuple('args', ['tcp',
@@ -29,13 +29,6 @@ class Gatherer:
         self.args.all = False
         self.args.unix = False
 
-    def _load_logic(self):
-        ss2_script_path = utils.which('ss2')
-        self.ss2 = (importlib.
-                    machinery.
-                    SourceFileLoader('ss2',
-                                     ss2_script_path).load_module())
-
     def _reset_io(self):
         if sys.version_info[0] == 2:
             import cStringIO
@@ -47,7 +40,7 @@ class Gatherer:
         _stdout = sys.stdout
         sys.stdout = self.stream_sink
 
-        self.ss2.run(self.args)
+        ss2.run(self.args)
 
         # catch stdout
         sys.stdout = _stdout
