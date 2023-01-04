@@ -34,7 +34,7 @@ setup(
     packages=find_packages(),
 
     install_requires=[
-        'pyroute2==0.5.19',
+       # 'pyroute2==0.5.19', installed from fork for now
         'prometheus-client',
         'PyYAML',
         'psutil'
