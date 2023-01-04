@@ -1,8 +1,10 @@
 ---
 
+# Minimal Example Configuration
+
 #>> Mandatory
 logic:
-    metrics:
+    metrics: # Metrics to collect
         histograms:
             active: True
             latency:
@@ -31,7 +33,7 @@ logic:
                 active: True
             data_segs_out:
                 active: True
-    compression:
+    compression: # Compressing collected flow data
         label_folding:
             origin: "pid_condensed"
             # Shape Outline:
@@ -39,19 +41,21 @@ logic:
             # pid_condensed: flow="(20005)(DST#172.217.18.2|443)"
     #<<<<<<<<<<<<<<<<<<<<<<<<<<
     # uncomment for usage
+    # Defining which flows to actually collect. Certain flow characteristics
+    # are allowed perform the selection.
     selection:
         #process:
-            #pids:
+            #pids: # flows of which processes holding the socket
                 #- 200
                 #- 1500
-            #cmds:
+            #cmds: # flow of which command holding the soccekt
                 #- "firefox"
         #stack:
-            #peers:
+            #peers: # flows that are peering to certain targets
             #   addresses:
                 #- "8.8.4.4"
             #   hosts:
                 #- "some.de"
-            #portranges:
+            #portranges: # flows in a certain local port range
                 #- lower: 2000
                   #upper: 10000
