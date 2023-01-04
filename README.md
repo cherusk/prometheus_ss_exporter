@@ -2,13 +2,37 @@
 
 # prometheus_ss_exporter
 
-Flows|Socket Statistics offering Exporter
+Exporter that gathers Operating System Network Socket Statistics as Metrics.
 
-# Grafana Sample
+Underlying collection logic consumed is [pyroute2](https://github.com/svinota/pyroute2) - more specifically ss2.
 
-![sample](https://github.com/cherusk/prometheus_ss_exporter/blob/master/grafana_sample.png)
 
-# Example Sample
+# Hints 
+
+Although the label space for individual flows is bounded by the underlying
+flowing constraints configured on kernel level.
+
+Nontheless, for very variadic traffic flow patterns with many flows being
+created and being phased out, this exporter may does lead to a overwhelming
+label space. That can already hold true for short amounts of times.
+
+Hence, depending on the specific granularity requirements and resources of the
+scenario to run this exporter in, one should deliberately consider to make use of
+following options:
+
+Mitigation tactics are:
++ The --storage.tsdb.retention=<yours> option of the prometheus server. It
+  gives bounds to the metrics label data held available can relieve capacity
+  constraints significantly. Nigh this is not necessarily confined to ad-hoc
+  oriented introspection deployments of the exporter. That's also correct on
+  vaster scale, let's say  when one is apt at forming a distinct retention
+  (sub)hierarchy of servers, maybe within a set of prometheus federations.
++ To further reduce the flow metrics label cardinality, use the data selection
+  configration aspects of the exporter. That confines the collection to only
+  selected flows with certain characteristics.
+
+
+# Sample Scrape
 
 ```
 # TYPE tcp_rtt gauge
@@ -58,15 +82,6 @@ tcp_rtt_hist_ms_count 10.0
 tcp_rtt_hist_ms_sum 24.0
 ```
 
-# Hints 
-
-Although the label space for individual flows is bounded by the underlying flowing constraints configured on kernel level, for certain, highly dynamic traffic flow patterns this exporter is infringing the recommendation as not to employ an "open" and so potentially gargantuan label spaces. That also holds for short amounts of times. Hence, one should deliberately consider following options depending on the specific granularity requirements and resources at hand. 
-
-Apparent mitigation tactics are:
-+ The --storage.tsdb.retention=<yours> option of the prometheus server to give bounds to the metrics label data held available can relieve capacity constraints significantly. Nigh this is not necessarily confined to ad-hoc oriented introspection employments. That's holding equally on vaster scale, e.g. when one is apt at forming a distinct retention (sub)hierarchy of servers, maybe within a set of prometheus federations.
-+ To further deplete the flow metrics lable cardinality, use the data selection configration aspects of the exporter:
-..+ Practically, skimm the **selection** section and for choosing the set of flows of interest.
-
 # Install
 
 ```
@@ -74,7 +89,3 @@ Apparent mitigation tactics are:
     2) do 
     # python setup.py install
 ```
-
-# Author
-
-Matthias Tafelmeier
