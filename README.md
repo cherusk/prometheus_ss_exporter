@@ -90,7 +90,7 @@ YOUR_CONFIG_FILE=<path_to_file>
 IMAGE="ghcr.io/cherusk/prometheus_ss_exporter:1.0.0"
 
 docker run --privileged --network host --pid host --rm \
-           -p 8080:80 -e PORT=8090 -e CONFIG_FILE="${YOUR_CONFIG_FILE}" \
+           -p 8090:8090 -e PORT=8090 -e CONFIG_FILE="${YOUR_CONFIG_FILE}" \
            -v $(pwd):/exporter --name=prometheus_ss_exporter \
            "${IMAGE}"
 
