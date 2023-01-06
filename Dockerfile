@@ -9,7 +9,6 @@ RUN set -ex \
         && apt-get update \
         && apt-get install -y git \
         && apt-get clean \
-        && useradd -ms /bin/bash -d ${EXPORTER_HOME} exporter \
         && pip install --no-cache-dir -U pip \
         && cd /prometheus-ss-exporter \
         && python3 setup.py install
@@ -24,7 +23,7 @@ RUN /bin/bash -c "git clone https://github.com/cherusk/pyroute2.git \
 
 EXPOSE 8090
 
-USER exporter
+USER root
 WORKDIR "${EXPORTER_HOME}"
 
 ENTRYPOINT prometheus_ss_exporter --port "${PORT}" --cnfg "${CONFIG_FILE}"
