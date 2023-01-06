@@ -13,7 +13,7 @@ class Selector:
             return True
 
         def peers(self, flow,
-                  hosts=[], addresses=[]):
+                  hosts=[], addresses=[], networks=[]):
             if addresses:
                 dst_ip = ip_a.ip_address(flow['dst'])
                 for node in addresses:
@@ -27,6 +27,13 @@ class Selector:
             if hosts:
                 if flow['dst_host'] in hosts:
                     return True
+
+            if networks:
+                for network in networks:
+                    _network = ip_a.IPv4Network(network)
+                    dst_ip = ip_a.ip_address(flow['dst'])
+                    if dst_ip in _network:
+                        return True
 
             return False
 
@@ -67,7 +74,8 @@ class Selector:
         conditions = [self.discern.ports(flow, self.cnfg['stack']['portranges']),
                       self.discern.peers(flow,
                                          hosts=self.cnfg['stack']['nodes']['hosts'],
-                                         addresses=self.cnfg['stack']['nodes']['addresses']),
+                                         addresses=self.cnfg['stack']['nodes']['addresses'],
+                                         networks=self.cnfg['stack']['nodes']['networks']),
                       self.discern.process(flow,
                                            pids=self.cnfg['process']['pids'],
                                            cmds=self.cnfg['process']['cmds'])
