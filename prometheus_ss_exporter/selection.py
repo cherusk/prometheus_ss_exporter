@@ -71,11 +71,11 @@ class Selector:
         return self._core(flow)
 
     def _arbitrate(self, flow):
-        conditions = [self.discern.ports(flow, self.cnfg['stack']['portranges']),
+        conditions = [self.discern.ports(flow, self.cnfg['peering']['portranges']),
                       self.discern.peers(flow,
-                                         hosts=self.cnfg['stack']['nodes']['hosts'],
-                                         addresses=self.cnfg['stack']['nodes']['addresses'],
-                                         networks=self.cnfg['stack']['nodes']['networks']),
+                                         hosts=self.cnfg['peering']['nodes']['hosts'],
+                                         addresses=self.cnfg['peering']['nodes']['addresses'],
+                                         networks=self.cnfg['peering']['nodes']['networks']),
                       self.discern.process(flow,
                                            pids=self.cnfg['process']['pids'],
                                            cmds=self.cnfg['process']['cmds'])
