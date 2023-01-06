@@ -50,14 +50,13 @@ logic:
                 #- 1500
             #cmds: # flow of which command holding the soccekt
                 #- "firefox"
-        #stack:
-            #peers: # flows that are peering to certain targets
-            #   addresses:
-                #- "8.8.4.4"
-            #   networks: # in cidr - only IPv4 so far
-            #    - 169.254.0.0/16
-            #   hosts:
-                #- "some.de"
+        #peering: # flows that are peering to certain targets
+        #   addresses:
+            #- "8.8.4.4"
+        #   networks: # in cidr - only IPv4 so far
+        #    - 169.254.0.0/16
+        #   hosts:
+            #- "some.de"
             #portranges: # flows in a certain local port range
                 #- lower: 2000
                   #upper: 10000

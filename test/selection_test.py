@@ -21,6 +21,15 @@ class SelectorTesting(unittest.TestCase):
         flow = {'dst_host': 'test.root.org'}
         outcome = SelectorTesting.discerner.peers(flow,
                                                   hosts=selector_hosts)
+
+        self.assertFalse(outcome)
+
+        selector_networks = ["192.168.0.0/16"]
+        flow = {'dst': '91.189.92.41'}
+
+        outcome = SelectorTesting.discerner.peers(flow,
+                                                  networks=selector_networks)
+
         self.assertFalse(outcome)
 
     def test_peers_accept_test(self):
@@ -35,6 +44,15 @@ class SelectorTesting(unittest.TestCase):
         flow = {'dst_host': 'test.leave.org'}
         outcome = SelectorTesting.discerner.peers(flow,
                                                   hosts=selector_hosts)
+
+        self.assertTrue(outcome)
+
+        selector_networks = ["192.168.0.0/16"]
+        flow = {'dst': '192.168.1.1'}
+
+        outcome = SelectorTesting.discerner.peers(flow,
+                                                  networks=selector_networks)
+
         self.assertTrue(outcome)
 
     def test_port_decline_test(self):
