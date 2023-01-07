@@ -98,10 +98,12 @@ class SelectorTesting(unittest.TestCase):
 
     def test_combined_accept_test(self):
         selection_config = {
-                'selection': {
-                    'peering': {
-                        'networks': [ '192.168.0.0/16' ],
-                        'portranges': [{ 'lower': 1000, 'upper': 2000 }]
+                'logic': {
+                    'selection': {
+                        'peering': {
+                            'networks': [ '192.168.0.0/16' ],
+                            'portranges': [{ 'lower': 1000, 'upper': 2000 }]
+                            }
                         }
                     }
                 }
@@ -114,10 +116,12 @@ class SelectorTesting(unittest.TestCase):
 
     def test_combined_decline_test(self):
         selection_config = {
-                'selection': {
-                    'peering': {
-                        'networks': [ '192.168.0.0/16' ],
-                        'portranges': [{ 'lower': 1000, 'upper': 2000 }]
+                'logic': {
+                    'selection': {
+                        'peering': {
+                            'networks': [ '192.168.0.0/16' ],
+                            'portranges': [{ 'lower': 1000, 'upper': 2000 }]
+                            }
                         }
                     }
                 }
