@@ -10,7 +10,7 @@ class Selector:
                 return True
 
             for p_range in portranges:
-                if ((flow['dst_port'] >= p_range['lower']) or
+                if ((flow['dst_port'] >= p_range['lower']) and
                    (flow['dst_port'] <= p_range['upper'])):
                     return True
             return False

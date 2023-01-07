@@ -87,7 +87,7 @@ class SelectorTesting(unittest.TestCase):
                         }
                     }
                 }
-        flow = {'dst': '192.168.92.41', 'dst_port': 2500}
+        flow = {'dst': '192.168.92.41', 'dst_port': 1500}
 
         selector = SelectorTesting.selector(selection_config)
         outcome = selector.arbitrate(flow)
