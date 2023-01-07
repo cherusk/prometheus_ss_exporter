@@ -61,6 +61,7 @@ class Selector:
 
     def __init__(self, cnfg):
         key = 'selection'
+        cnfg = cnfg.get('logic')
         if (key in cnfg.keys() and
            cnfg[key]):
             self._core = self._arbitrate
