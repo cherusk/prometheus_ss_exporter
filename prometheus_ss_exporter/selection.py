@@ -6,6 +6,9 @@ import itertools as it
 class Selector:
     class Discerner:
         def ports(self, flow, portranges):
+            if not portranges:
+                return True
+
             for p_range in portranges:
                 if ((flow['dst_port'] >= p_range['lower']) or
                    (flow['dst_port'] <= p_range['upper'])):
@@ -41,10 +44,11 @@ class Selector:
                     pids=[], cmds=[]):
             flow_pids = []
             flow_cmds = []
-            for usr, pid_ctxt in flow['usr_ctxt'].items():
-                for pid, cmd_ctxt in pid_ctxt.items():
-                    flow_pids.append(pid)
-                    flow_cmds.append(cmd_ctxt['full_cmd'])
+            if flow.get('usr_ctxt'):
+                for usr, pid_ctxt in flow['usr_ctxt'].items():
+                    for pid, cmd_ctxt in pid_ctxt.items():
+                        flow_pids.append(pid)
+                        flow_cmds.append(cmd_ctxt['full_cmd'])
 
             for pid in pids:
                 if pid in flow_pids:
@@ -71,14 +75,12 @@ class Selector:
         return self._core(flow)
 
     def _arbitrate(self, flow):
-        conditions = [self.discern.ports(flow, self.cnfg['peering']['portranges']),
-                      self.discern.peers(flow,
-                                         hosts=self.cnfg['peering']['hosts'],
-                                         addresses=self.cnfg['peering']['addresses'],
-                                         networks=self.cnfg['peering']['networks']),
-                      self.discern.process(flow,
-                                           pids=self.cnfg['process']['pids'],
-                                           cmds=self.cnfg['process']['cmds'])
+        conditions = [ self.discern.ports(flow, self.cnfg.get('peering').get('portranges')) if self.cnfg.get('peering') else True,
+                       self.discern.peers(flow, hosts=self.cnfg.get('peering').get('hosts'),
+                                                addresses=self.cnfg.get('peering').get('addresses'),
+                                                networks=self.cnfg.get('peering').get('networks')) if self.cnfg.get('peering') else True,
+                       self.discern.process(flow, pids=self.cnfg.get('process').get('pids'),
+                                                  cmds=self.cnfg.get('process').get('cmds')) if self.cnfg.get('process') else True
                       ]
         if list(filter(lambda _: _, conditions)):
             return True
