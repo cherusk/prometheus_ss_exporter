@@ -80,7 +80,7 @@ class Selector:
                                            pids=self.cnfg['process']['pids'],
                                            cmds=self.cnfg['process']['cmds'])
                       ]
-        if it.dropwhile(lambda _: _, conditions):
+        if list(filter(lambda _: _, conditions)):
             return True
 
         return False
