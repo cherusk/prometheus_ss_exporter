@@ -82,7 +82,8 @@ class Selector:
                        self.discern.process(flow, pids=self.cnfg.get('process').get('pids'),
                                                   cmds=self.cnfg.get('process').get('cmds')) if self.cnfg.get('process') else True
                       ]
-        if list(filter(lambda _: _, conditions)):
-            return True
+        # if one condition false, we decline sample
+        if list(it.filterfalse(lambda _: _, conditions)):
+            return False
 
-        return False
+        return True
