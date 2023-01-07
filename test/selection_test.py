@@ -8,6 +8,7 @@ class SelectorTesting(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.discerner = selection.Selector.Discerner()
+        cls.selector = selection.Selector
 
     def test_peers_decline(self):
         selector_addr = ["10.0.1.10"]
@@ -76,3 +77,35 @@ class SelectorTesting(unittest.TestCase):
         outcome = SelectorTesting.discerner.process(flow,
                                                     cmds=selector_cmds)
         self.assertTrue(outcome)
+
+    def test_combined_accept_test(self):
+        selection_config = {
+                'selection': {
+                    'peering': {
+                        'networks': [ '192.168.0.0/16' ],
+                        'portranges': [{ 'lower': 1000, 'upper': 2000 }]
+                        }
+                    }
+                }
+        flow = {'dst': '192.168.92.41', 'dst_port': 2500}
+
+        selector = SelectorTesting.selector(selection_config)
+        outcome = selector.arbitrate(flow)
+
+        self.assertTrue(outcome)
+
+    def test_combined_decline_test(self):
+        selection_config = {
+                'selection': {
+                    'peering': {
+                        'networks': [ '192.168.0.0/16' ],
+                        'portranges': [{ 'lower': 1000, 'upper': 2000 }]
+                        }
+                    }
+                }
+        flow = {'dst': '192.168.92.41', 'dst_port': 900}
+
+        selector = SelectorTesting.selector(selection_config)
+        outcome = selector.arbitrate(flow)
+
+        self.assertFalse(outcome)
