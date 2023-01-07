@@ -7,10 +7,10 @@ class Selector:
     class Discerner:
         def ports(self, flow, portranges):
             for p_range in portranges:
-                if ((flow['dst_port'] < p_range['lower']) or
-                   (flow['dst_port'] > p_range['upper'])):
-                    return False
-            return True
+                if ((flow['dst_port'] >= p_range['lower']) or
+                   (flow['dst_port'] <= p_range['upper'])):
+                    return True
+            return False
 
         def peers(self, flow,
                   hosts=[], addresses=[], networks=[]):
