@@ -13,14 +13,6 @@ RUN set -ex \
         && cd /prometheus-ss-exporter \
         && python3 setup.py install
 
-# install ss2 from forked pyroute2
-RUN /bin/bash -c "git clone https://github.com/cherusk/pyroute2.git \
-                  && pushd pyroute2 \
-                  && git checkout -B install_ss2_as_module origin/install_ss2_as_module \
-                  && python3 setup.py install \
-                  && popd \
-                  && rmdir --ignore-fail-on-non-empty pyroute2"
-
 EXPOSE 8090
 
 USER root
