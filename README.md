@@ -1,5 +1,3 @@
-[![Build Status](https://travis-ci.com/cherusk/prometheus_ss_exporter.svg?branch=master)](https://travis-ci.com/cherusk/prometheus_ss_exporter)
-
 # prometheus_ss_exporter
 
 Exporter that gathers Operating System Network Socket Statistics as Metrics.
@@ -87,7 +85,8 @@ tcp_rtt_hist_ms_sum 24.0
 ```
 
 YOUR_CONFIG_FILE=<path_to_file>
-IMAGE="ghcr.io/cherusk/prometheus_ss_exporter:1.0.0"
+RELEASE_TAG=1.2.0
+IMAGE="ghcr.io/cherusk/prometheus_ss_exporter:${RELEASE_TAG}"
 
 docker run --privileged --network host --pid host --rm \
            -p 8090:8090 -e PORT=8090 -e CONFIG_FILE="${YOUR_CONFIG_FILE}" \
