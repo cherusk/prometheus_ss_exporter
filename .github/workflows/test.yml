@@ -41,17 +41,9 @@ jobs:
           python-version: ${{ matrix.python-version  }}
       - name: Install dependencies
         run: |
+          python -m pip install --upgrade pip nose2
           sudo python3 setup.py install
-          python -m pip install --upgrade pip nose2 pyroute2
-          # install fork
-          git clone https://github.com/cherusk/pyroute2.git
-          pushd pyroute2
-          git checkout -B install_ss2_as_module origin/install_ss2_as_module
-          sudo python3 setup.py install
-          popd
-          rmdir --ignore-fail-on-non-empty pyroute2
 
       - name: Test
         run: |
           nose2 --verbose --config ./test/nose2.cfg
-
