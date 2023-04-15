@@ -34,7 +34,7 @@ setup(
     packages=find_packages(),
 
     install_requires=[
-        'pyroute2==0.7.4',
+        'pyroute2==0.7.7',
         'prometheus-client',
         'PyYAML',
         'psutil'
