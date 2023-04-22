@@ -22,8 +22,13 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-from prometheus_client import start_http_server
+from prometheus_client.twisted import MetricsResource
 from prometheus_client.core import (REGISTRY)
+
+from twisted.web.server import Site
+from twisted.web.resource import Resource
+from twisted.internet import reactor
+
 import time
 import argparse
 import yaml
@@ -55,6 +60,13 @@ class ss2_collector(object):
             buckets, _sum = histo['buckets'].reveal()
             histo['family'].add_metric([], buckets, _sum)
             yield histo['family']
+
+
+class health_check(Resource):
+    isLeaf = True
+
+    def render_GET(self, request):
+        return "200 OK"
 
 
 def setup_args():
@@ -96,10 +108,15 @@ def main():
         cnfg = setup_cnfg(args.cnfg)
         port = int(args.port)
         REGISTRY.register(ss2_collector(args, cnfg))
-        start_http_server(port)
-        print("Serving at port: %s" % port)
-        while True:
-            time.sleep(100)
+
+        root = Resource()
+        root.putChild(b'metrics', MetricsResource(registry=REGISTRY))
+        root.putChild(b'health', health_check)
+
+        factory = Site(root)
+        reactor.listenTCP(port, factory)
+        reactor.run()
+
     except KeyboardInterrupt:
         print("Ceasing operations")
         exit(0)
