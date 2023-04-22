@@ -7,9 +7,9 @@ COPY . /prometheus-ss-exporter
 
 RUN set -ex \
         && apt-get update \
-        && apt-get install -y git \
+        && apt-get install -y git curl \
         && apt-get clean \
-        && pip install --no-cache-dir -U pip curl \
+        && pip install --no-cache-dir -U pip \
         && cd /prometheus-ss-exporter \
         && python3 setup.py install
 
