@@ -15,7 +15,7 @@ RUN set -ex \
 
 EXPOSE 8090
 
-HEALTHCHECK --interval=1 --retries=1 --timeout=2 \
+HEALTHCHECK --interval=1s --retries=1s --timeout=2s \
     CMD curl -f http://localhost:"${PORT}"/health || exit 1
 
 USER root
