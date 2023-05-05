@@ -34,7 +34,7 @@ setup(
     packages=find_packages(),
 
     install_requires=[
-        'pyroute2==0.7.7',
+        'pyroute2==0.7.8',
         'Twisted==22.10.0',
         'prometheus-client',
         'PyYAML',
