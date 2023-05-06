@@ -63,10 +63,9 @@ class ss2_collector(object):
 
 
 class health_check(Resource):
-    isLeaf = True
 
     def render_GET(self, request):
-        return "200 OK"
+        return "200 OK".encode("utf-8")
 
 
 def setup_args():
@@ -111,7 +110,7 @@ def main():
 
         root = Resource()
         root.putChild(b'metrics', MetricsResource(registry=REGISTRY))
-        root.putChild(b'health', health_check)
+        root.putChild(b'health', health_check())
 
         factory = Site(root)
         reactor.listenTCP(port, factory)
