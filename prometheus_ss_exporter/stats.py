@@ -48,7 +48,16 @@ class Gatherer:
 
         self._reset_io()
 
-        return json.loads(sk_stats_raw)
+        sk_stats_parsed = dict()
+        try:
+            sk_stats_parsed = json.loads(sk_stats_raw)
+        except json.decoder.JSONDecodeError as err:
+            logging.error("Failed parsing sample")
+            logging.error("-----")
+            logging.error(sk_stats_parsed)
+            logging.error("-----")
+
+        return sk_stats_parsed
 
 
 class Condenser:
