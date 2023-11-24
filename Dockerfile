@@ -13,6 +13,14 @@ RUN set -ex \
         && cd /prometheus-ss-exporter \
         && python3 setup.py install
 
+# interim -- install ss2 from forked pyroute2
+RUN /bin/bash -c "git clone https://github.com/cherusk/pyroute2.git \
+                  && pushd pyroute2 \
+                  && git checkout -B  origin/ss2_patch_class_level_data \
+                  && python3 setup.py install \
+                  && popd \
+                  && rmdir --ignore-fail-on-non-empty pyroute2"
+
 EXPOSE 8090
 
 HEALTHCHECK --interval=1s --timeout=2s --retries=1 \
