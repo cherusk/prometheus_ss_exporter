@@ -14,7 +14,6 @@ from . import utils
 
 class Gatherer:
     def __init__(self):
-        self._reset_io()
 
         self.args = collections.namedtuple('args', ['tcp',
                                                     'listen',
@@ -29,35 +28,15 @@ class Gatherer:
         self.args.all = False
         self.args.unix = False
 
-    def _reset_io(self):
-        if sys.version_info[0] == 2:
-            import cStringIO
-            self.stream_sink = cStringIO.StringIO()
-        else:
-            self.stream_sink = io.StringIO()
-
     def provide_tcp_stats(self):
-        _stdout = sys.stdout
-        sys.stdout = self.stream_sink
 
-        ss2.run(self.args)
+        ss2.RUN_AS_MODULE = True
 
-        # catch stdout
-        sys.stdout = _stdout
-        sk_stats_raw = self.stream_sink.getvalue()
+        sk_stats_all = ss2.run(self.args)
 
-        self._reset_io()
+        sk_stats = sk_stats_all[0] # we only query for TCP
 
-        sk_stats_parsed = dict(TCP=dict(flows=list()))
-        try:
-            sk_stats_parsed = json.loads(sk_stats_raw)
-        except json.decoder.JSONDecodeError as err:
-            logging.error("Failed parsing sample")
-            logging.error("-----")
-            logging.error(sk_stats_raw)
-            logging.error("-----")
-
-        return sk_stats_parsed
+        return sk_stats
 
 
 class Condenser:
