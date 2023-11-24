@@ -17,7 +17,7 @@ RUN set -ex \
 RUN /bin/bash -c "git clone https://github.com/cherusk/pyroute2.git \
                   && pushd pyroute2 \
                   && git checkout origin/ss2_patch_class_level_data \
-                  && python3 setup.py install \
+                  && cp pyroute2/netlink/diag/ss2.py /usr/local/lib/python3.7/site-packages/pyroute2-0.7.8-py3.7.egg/pyroute2/netlink/diag/ss2.py \
                   && popd \
                   && rmdir --ignore-fail-on-non-empty pyroute2"
 
