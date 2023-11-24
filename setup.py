@@ -3,7 +3,7 @@ from setuptools import setup, find_packages
 setup(
     name='prometheus-ss-exporter',
 
-    version='1.0.0',
+    version='2.1.1',
 
     description='prometheus socket statistics exporter',
 
@@ -36,9 +36,12 @@ setup(
     install_requires=[
         'pyroute2==0.7.8',
         'Twisted==22.10.0',
-        'prometheus-client',
-        'PyYAML',
-        'psutil'
+        'prometheus-client==0.16.0',
+        'PyYAML==6.0',
+        'psutil==5.9.5',
+        'zipp==3.15.0',
+        'importlib-metadata==6.6.0',
+        'typing_extensions==4.5.0'
     ],
 
     entry_points={
