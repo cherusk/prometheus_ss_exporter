@@ -16,7 +16,7 @@ RUN set -ex \
 # interim -- install ss2 from forked pyroute2
 RUN /bin/bash -c "git clone https://github.com/cherusk/pyroute2.git \
                   && pushd pyroute2 \
-                  && git checkout -B  origin/ss2_patch_class_level_data \
+                  && git checkout origin/ss2_patch_class_level_data \
                   && python3 setup.py install \
                   && popd \
                   && rmdir --ignore-fail-on-non-empty pyroute2"
