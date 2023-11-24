@@ -29,24 +29,11 @@ class Gatherer:
         self.args.all = False
         self.args.unix = False
 
-    def _reset_io(self):
-        if sys.version_info[0] == 2:
-            import cStringIO
-            self.stream_sink = cStringIO.StringIO()
-        else:
-            self.stream_sink = io.StringIO()
-
     def provide_tcp_stats(self):
-        _stdout = sys.stdout
-        sys.stdout = self.stream_sink
 
-        ss2.run(self.args)
+        ss2.RUN_AS_MODULE = True
 
-        # catch stdout
-        sys.stdout = _stdout
-        sk_stats_raw = self.stream_sink.getvalue()
-
-        self._reset_io()
+        sk_stats_raw = ss2.run(self.args)
 
         sk_stats_parsed = dict(TCP=dict(flows=list()))
         try:
