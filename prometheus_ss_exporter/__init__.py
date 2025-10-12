@@ -41,7 +41,7 @@ from . import stats
 
 class ss2_collector(object):
 
-    def __init__(self, args, cnfg):
+    def __init__(self, cnfg):
         self.gather = stats.Gatherer()
         self.selector = selection.Selector(cnfg)
         self.metrics = keep.MetricsKeep(cnfg)
@@ -106,7 +106,7 @@ def main():
         args = setup_args()
         cnfg = setup_cnfg(args.cnfg)
         port = int(args.port)
-        REGISTRY.register(ss2_collector(args, cnfg))
+        REGISTRY.register(ss2_collector(cnfg))
 
         root = Resource()
         root.putChild(b'metrics', MetricsResource(registry=REGISTRY))
