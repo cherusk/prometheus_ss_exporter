@@ -1,40 +1,240 @@
-name: Create and publish a Docker image
+name: Build and Release Docker Image
 
+# Trigger on published releases or manual workflow dispatch
 on:
   release:
-    types: [published, edited]
+    types: [published]  # Only trigger on first publication, not edits
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Release tag (e.g., v1.2.3)'
+        required: true
+        type: string
 
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
+  # Pre-release validation step
+  validate-release:
+    runs-on: ubuntu-latest
+    outputs:
+      should-proceed: ${{ steps.validation.outputs.should-proceed }}
+      version: ${{ steps.validation.outputs.version }}
+      is-latest: ${{ steps.validation.outputs.is-latest }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Need full history for version validation
+
+      - name: Validate release and extract version
+        id: validation
+        run: |
+          # Extract version from release event or manual input
+          if [ "${{ github.event_name }}" = "release" ]; then
+            VERSION="${{ github.event.release.tag_name }}"
+            IS_LATEST="true"  # Assume release events create latest
+          else
+            echo "Manual release tags not supported yet.
+            exit 2
+          fi
+
+          # Validate semantic versioning format (v1.2.3 or v1.2.3-beta)
+          if [[ ! "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9]+)?$ ]]; then
+            echo "❌ Invalid version format: $VERSION"
+            echo "Expected format: v1.2.3 or v1.2.3-beta"
+            exit 1
+          fi
+
+          # Validate that the tag exists (for manual dispatch)
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            if ! git rev-parse --verify "$VERSION" >/dev/null 2>&1; then
+              echo "❌ Tag $VERSION does not exist in repository"
+              exit 1
+            fi
+          fi
+
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "should-proceed=true" >> $GITHUB_OUTPUT
+          echo "is-latest=$IS_LATEST" >> $GITHUB_OUTPUT
+          echo "✅ Release validation passed for version: $VERSION"
+          echo "📋 Latest tag: $IS_LATEST"
+
+  # Security scanning before building
+  security-scan:
+    runs-on: ubuntu-latest
+    needs: validate-release
+    if: needs.validate-release.outputs.should-proceed == 'true'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'  # File system scan for source code
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          ignore-unfixed: true
+          severity: 'HIGH,CRITICAL'
+
+      - name: Upload Trivy scan results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-results.sarif'
+          category: "security-scan"
+
+  # Main build and push job with enhanced security and caching
   build-and-push-image:
     runs-on: ubuntu-latest
+    needs: [validate-release, security-scan]
+    if: needs.validate-release.outputs.should-proceed == 'true'
     permissions:
       contents: read
       packages: write
+      security-events: write
+      attestations: write
+      id-token: write
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+      image: ${{ steps.meta.outputs.image }}
+      tags: ${{ steps.meta.outputs.tags }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Log in to the Container registry
-        uses: docker/login-action@v2
+      - name: Set up Docker Buildx with enhanced features
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: |
+            image=moby/buildkit:buildx-stable-1
+          buildkitd-flags: --allow-insecure-entitlement security.insecure
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract metadata for Docker
+      - name: Extract comprehensive metadata for Docker
         id: meta
-        uses: docker/metadata-action@v4
+        uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: type=semver,pattern={{version}}
+          tags: |
+            # Primary version tag
+            type=semver,pattern={{version}},value=${{ needs.validate-release.outputs.version }}
+            # Minor version tag for backwards compatibility
+            type=semver,pattern={{major}}.{{minor}},value=${{ needs.validate-release.outputs.version }}
+            # Major version tag for LTS tracking
+            type=semver,pattern={{major}},value=${{ needs.validate-release.outputs.version }}
+            # Latest tag only for stable releases (no pre-release suffix)
+            type=raw,value=latest,enable=${{ needs.validate-release.outputs.is-latest == 'true' && !contains(needs.validate-release.outputs.version, '-') }}
+          labels: |
+            # OCI-compliant labels
+            org.opencontainers.image.title=Prometheus Socket Statistics Exporter
+            org.opencontainers.image.description=Exporter that gathers Operating System Network Socket Statistics as Metrics using pyroute2
+            org.opencontainers.image.url=https://github.com/cherusk/prometheus_ss_exporter
+            org.opencontainers.image.source=${{ github.repository }}
+            org.opencontainers.image.version=${{ needs.validate-release.outputs.version }}
+            org.opencontainers.image.created=${{ github.event.head_commit.timestamp }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.licenses=MIT
+            org.opencontainers.image.documentation=https://github.com/cherusk/prometheus_ss_exporter#readme
+            # Custom labels for our use case
+            maintainer=Matthias Tafelmeier <matthias.tafelmeier@gmx.net>
+            prometheus.exporter.type=socket_statistics
+            prometheus.exporter.port=8090
 
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v4
+      - name: Build and push Docker image with security and caching
+        id: build
+        uses: docker/build-push-action@v6
         with:
           context: .
+          platforms: linux/amd64  # Single platform as requested
           push: true
           tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+          # Enhanced security and caching options
+          cache-from: type=gha,scope=release-build
+          cache-to: type=gha,mode=max,scope=release-build
+
+          # Build arguments for reproducibility
+          build-args: |
+            BUILD_DATE=${{ github.event.head_commit.timestamp }}
+            VCS_REF=${{ github.sha }}
+            VERSION=${{ needs.validate-release.outputs.version }}
+
+          # Security scanning and attestations
+          provenance: true
+          sbom: true
+
+          # Output configuration for downstream steps
+          outputs: type=image,name=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=true
+
+      - name: Generate and attach SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
+          format: spdx-json
+          output-file: sbom-spdx.json
+          upload-artifact: true
+          artifact-name: sbom-${{ needs.validate-release.outputs.version }}
+
+      - name: Generate security attestation
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+
+      - name: Create security vulnerability report
+        run: |
+          echo "🔍 Scanning final image for vulnerabilities..."
+          trivy image --format json --output trivy-image-report.json \
+            "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}"
+
+          # Count vulnerabilities by severity
+          CRITICAL=$(jq -r '.Results[]?.Vulnerabilities[]? | select(.Severity == "CRITICAL") | .VulnerabilityID' trivy-image-report.json | wc -l)
+          HIGH=$(jq -r '.Results[]?.Vulnerabilities[]? | select(.Severity == "HIGH") | .VulnerabilityID' trivy-image-report.json | wc -l)
+
+          echo "📊 Security Scan Summary:" >> $GITHUB_STEP_SUMMARY
+          echo "- Critical vulnerabilities: $CRITICAL" >> $GITHUB_STEP_SUMMARY
+          echo "- High vulnerabilities: $HIGH" >> $GITHUB_STEP_SUMMARY
+
+          # Upload vulnerability report as artifact
+          echo "trivy-image-report.json" > upload-files.list
+
+      - name: Upload security scan artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-reports-${{ needs.validate-release.outputs.version }}
+          path: |
+            trivy-image-report.json
+            sbom-spdx.json
+          retention-days: 90
+
+  # Release confirmation and summary
+  release-summary:
+    runs-on: ubuntu-latest
+    needs: [validate-release, build-and-push-image]
+    if: always() && needs.validate-release.outputs.should-proceed == 'true' && needs.build-and-push-image.result == 'success'
+    steps:
+      - name: Create comprehensive release summary
+        run: |
+          echo "## 🚀 Docker Image Release Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📋 Release Information" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** \`${{ needs.validate-release.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Repository:** \`${{ github.repository }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Image Digest:** \`${{ needs.build-and-push-image.outputs.digest }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Build Time:** $(date -u)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          echo "### 📦 Published Docker Images" >> $GITHUB_STEP_SUMMARY
