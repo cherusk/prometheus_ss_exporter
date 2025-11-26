@@ -35,7 +35,7 @@ setup(
 
     install_requires=[
         'pyroute2==0.7.8',
-        'Twisted==23.10.0',
+        'Twisted==24.7.0rc1',
         'prometheus-client==0.16.0',
         'PyYAML==6.0',
         'psutil==5.9.5',
