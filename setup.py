@@ -39,7 +39,7 @@ setup(
         'prometheus-client==0.16.0',
         'PyYAML==6.0',
         'psutil==5.9.5',
-        'zipp==3.15.0',
+        'zipp==3.19.1',
         'importlib-metadata==6.6.0',
         'typing_extensions==4.5.0'
     ],
