@@ -87,8 +87,59 @@ type
   ExporterConfig* = object
     logic*: LogicConfig
 
+proc getDefaultRttHistogramConfig(): RttHistogramConfig =
+  RttHistogramConfig(
+    active: false,
+    bucketBounds: @[0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 25.0, 50.0, 100.0, 250.0, 500.0, 1000.0]
+  )
+
+proc getDefaultHistogramConfig(): HistogramConfig =
+  HistogramConfig(
+    active: false,
+    rtt: getDefaultRttHistogramConfig()
+  )
+
+proc getDefaultGaugeConfig(): GaugeConfig =
+  GaugeConfig(
+    active: true,
+    rtt: IndividualMetricConfig(active: true),
+    cwnd: IndividualMetricConfig(active: true),
+    deliveryRate: IndividualMetricConfig(active: true)
+  )
+
+proc getDefaultCounterConfig(): CounterConfig =
+  CounterConfig(
+    active: true,
+    dataSegsIn: IndividualMetricConfig(active: true),
+    dataSegsOut: IndividualMetricConfig(active: true)
+  )
+
+proc getDefaultMetricsConfig(): MetricsConfig =
+  MetricsConfig(
+    histograms: getDefaultHistogramConfig(),
+    gauges: getDefaultGaugeConfig(),
+    counters: getDefaultCounterConfig()
+  )
+
+proc getDefaultCompressionConfig(): CompressionConfig =
+  CompressionConfig(
+    labelFolding: "raw_endpoint"
+  )
+
+proc getDefaultLogicConfig(): LogicConfig =
+  LogicConfig(
+    metrics: getDefaultMetricsConfig(),
+    compression: getDefaultCompressionConfig(),
+    selection: none(SelectionConfig)
+  )
+
+proc getDefaultExporterConfig(): ExporterConfig =
+  ExporterConfig(
+    logic: getDefaultLogicConfig()
+  )
+
 proc loadConfig*(configPath: string): Option[ExporterConfig] =
-  ## Load configuration from YAML file
+  ## Load configuration from YAML file with proper default handling
   try:
     info "Loading configuration from: ", configPath
     
@@ -97,25 +148,15 @@ proc loadConfig*(configPath: string): Option[ExporterConfig] =
       return none(ExporterConfig)
     
     let content = readFile(configPath)
-    var config = ExporterConfig()
+    
+    # Start with default configuration
+    var config = getDefaultExporterConfig()
+    
+    # Load YAML configuration - this will only override fields present in the file
     load(content, config)
     
-    result = some(config)
-    
-    # Set defaults
-    result.get.logic.metrics.histograms.active = false
-    result.get.logic.metrics.histograms.rtt = RttHistogramConfig(active: false, bucketBounds: @[0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 25.0, 50.0, 100.0, 250.0, 500.0, 1000.0])
-    result.get.logic.metrics.gauges.active = true
-    result.get.logic.metrics.gauges.rtt = IndividualMetricConfig(active: true)
-    result.get.logic.metrics.gauges.cwnd = IndividualMetricConfig(active: true)
-    result.get.logic.metrics.gauges.deliveryRate = IndividualMetricConfig(active: true)
-    result.get.logic.metrics.counters.active = true
-    result.get.logic.metrics.counters.dataSegsIn = IndividualMetricConfig(active: true)
-    result.get.logic.metrics.counters.dataSegsOut = IndividualMetricConfig(active: true)
-    result.get.logic.compression.labelFolding = "raw_endpoint"
-    
-    info "Configuration loaded with default values"
-    return result
+    info "Configuration loaded successfully"
+    return some(config)
     
   except CatchableError as e:
     error "Failed to load configuration: ", e.msg
@@ -126,28 +167,29 @@ proc createSampleConfig*(configPath: string) =
   let sampleConfig = """
 ---
 # Prometheus Socket Statistics Exporter Configuration
+# All values shown below are the defaults - uncomment and modify as needed
 
 logic:
   metrics:
     histograms:
-      active: true
+      active: false  # Disabled by default
       rtt:
-        active: true
+        active: false  # RTT histograms disabled by default
         bucketBounds: [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 25.0, 50.0, 100.0, 250.0, 500.0, 1000.0]
     
     gauges:
-      active: true
+      active: true  # Enabled by default
       rtt: { active: true }
       cwnd: { active: true }
       deliveryRate: { active: true }
     
     counters:
-      active: true
+      active: true  # Enabled by default
       dataSegsIn: { active: true }
       dataSegsOut: { active: true }
   
   compression:
-    labelFolding: "raw_endpoint"  # or "pid_condensed"
+    labelFolding: "raw_endpoint"  # Default folding method
   
   selection:
     # Optional filtering rules
