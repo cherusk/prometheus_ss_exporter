@@ -1,0 +1,28 @@
+services:
+  prometheus-ss-exporter-nim:
+    build:
+      context: .
+      dockerfile: Dockerfile.nim
+    container_name: prometheus-ss-exporter-nim
+    network_mode: host
+    pid: host
+    privileged: true
+    restart: unless-stopped
+    environment:
+      - PORT=8020
+      - CONFIG_FILE=/config.yml
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./config.yml:/config.yml:ro
+    ports:
+      - "8020:8020"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8020/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    command: ["./prometheus_ss_exporter", "--port=8020", "--config=/config.yml"]
+    labels:
+      - "prometheus.job=socket-stats-prometheus-nim"
+      - "version=nim-2.1.1"

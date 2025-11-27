@@ -1,0 +1,54 @@
+---
+# Prometheus Socket Statistics Exporter Configuration - Complete Reference
+# Shows minimal settings for ALL available configuration options aligned with Nim config types
+
+logic:
+  # Complete metrics collection configuration
+  metrics:
+    # Histogram metrics for latency distributions
+    histograms:
+      active: false                    # Enable/disable histogram collection globally
+      bucketBounds: [0.1, 0.5, 1.0, 5.0, 10.0, 50.0, 100.0, 200.0]  # Latency bucket boundaries in ms
+    
+    # Gauge metrics for real-time TCP values
+    gauges:
+      active: false                    # Enable/disable gauge collection globally
+      rtt:                           # TCP round-trip time gauge
+        active: false                 # Enable RTT gauge metric
+      cwnd:                          # TCP congestion window gauge
+        active: false                 # Enable congestion window gauge metric
+      deliveryRate:                  # TCP delivery rate gauge
+        active: false                 # Enable delivery rate gauge metric
+    
+    # Counter metrics for cumulative data segment counts
+    counters:
+      active: false                   # Enable/disable counter collection globally
+      dataSegsIn:                    # Incoming data segments counter
+        active: false                 # Enable incoming data segments counter
+      dataSegsOut:                   # Outgoing data segments counter
+        active: false                 # Enable outgoing data segments counter
+  
+  # Label compression to reduce metric cardinality
+  compression:
+    labelFolding: "raw_endpoint"      # "raw_endpoint" or "pid_condensed"
+  
+  # Complete flow filtering configuration (all filters are optional)
+  selection:
+    # Process filtering - filter flows by process ID or command name
+    process:
+      pids: []                       # List of process IDs to monitor (empty = no PID filtering)
+      cmds: []                       # List of command names to monitor (empty = no command filtering)
+    
+    # Network/peer filtering - filter flows by network endpoints
+    peering:
+      addresses: []                  # Specific IP addresses to monitor (empty = no address filtering)
+      networks: []                   # CIDR networks to monitor (empty = no network filtering)
+      hosts: []                      # Hostnames to monitor (empty = no hostname filtering)
+    
+    # Port range filtering - filter flows by destination port ranges
+    portRanges: []                   # List of port ranges (empty = no port range filtering)
+    # Port range examples:
+    # - lower: 80                   # HTTP traffic
+    #   upper: 443                  # HTTPS traffic
+    # - lower: 8000                 # Custom app port range
+    #   upper: 9000
