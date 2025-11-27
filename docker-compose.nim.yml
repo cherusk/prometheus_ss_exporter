@@ -13,7 +13,7 @@ services:
       - CONFIG_FILE=/config.yml
       - LOG_LEVEL=INFO
     volumes:
-      - ./config.yml:/config.yml:ro
+      - ./examples/config.yml:/config.yml:ro
     ports:
       - "8020:8020"
     healthcheck:
