@@ -26,7 +26,6 @@ RUN nimble install -y -d
 
 # Copy source code
 COPY src/ ./src/
-COPY prometheus_ss_exporter/ ./prometheus_ss_exporter/
 
 # Build the application
 RUN nimble build -d:release -d:metrics --gc:arc
@@ -54,7 +53,7 @@ RUN groupadd -g 1000 ss_exporter && \
 WORKDIR /app
 
 # Copy binary and Python modules
-COPY --from=builder /app/prometheus_ss_exporter.out ./prometheus_ss_exporter
+COPY --from=builder /app/prometheus_ss_exporter ./prometheus_ss_exporter
 
 # Set ownership
 RUN chown -R ss_exporter:ss_exporter /app
