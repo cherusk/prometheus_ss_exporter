@@ -1,62 +1,46 @@
 ---
 
-# Minimal Example Configuration
+# Prometheus Socket Statistics Exporter Configuration
 
-#>> Mandatory
 logic:
-    metrics: # Metrics to collect
-        histograms:
-            active: True
-            latency:
-                active: True
-                bucket_bounds: # ms
-                            - .10
-                            - .50
-                            - 1.00
-                            - 5.00
-                            - 10.00
-                            - 50.00
-                            - 100.00
-                            - 200.00
-                            - 500.00
-        gauges:
-            active: True
-            rtt:
-                active: True
-            cwnd:
-                active: True
-            delivery_rate:
-                active: True
-        counters:
-            active: True
-            data_segs_in:
-                active: True
-            data_segs_out:
-                active: True
-    compression: # Compressing collected flow data
-        label_folding:
-            origin: "pid_condensed"
-            # Shape Outline:
-            # raw_endpoint: flow="(SRC#192.168.10.58|39366)(DST#104.19.199.151|443)"
-            # pid_condensed: flow="(20005)(DST#172.217.18.2|443)"
-    #<<<<<<<<<<<<<<<<<<<<<<<<<<
-    # uncomment for usage
-    # Defining which flows to actually collect. Certain flow characteristics
-    # are allowed perform the selection.
-    selection:
-        #process:
-            #pids: # flows of which processes holding the socket
-                #- 200
-                #- 1500
-            #cmds: # flow of which command holding the soccekt
-                #- "firefox"
-        #peering: # flows that are peering to certain targets
-        #   addresses:
-            #- "8.8.4.4"
-        #   networks: # in cidr - only IPv4 so far
-        #    - 169.254.0.0/16
-        #   hosts:
-            #- "some.de"
-            #portranges: # flows in a certain local port range
-                #- lower: 2000
-                  #upper: 10000
+  metrics:
+    histograms:
+      active: true
+      rtt:
+        active: true
+        bucketBounds: [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 25.0, 50.0, 100.0, 250.0, 500.0, 1000.0]
+
+    gauges:
+      active: true
+      rtt: { active: true }
+      cwnd: { active: true }
+      deliveryRate: { active: true }
+
+    counters:
+      active: true
+      dataSegsIn: { active: true }
+      dataSegsOut: { active: true }
+
+  compression:
+    labelFolding: "raw_endpoint"  # or "pid_condensed"
+
+  selection:
+    # [Optional] filtering rules
+    #
+    # Process filtering
+    process:
+      pids: [1000, 2000]  # Specific process IDs
+      cmds: ["nginx", "apache2"]  # Process names
+
+    # Network/peer filtering
+    peering:
+      addresses: ["8.8.8.8", "1.1.1.1"]  # Specific IPs
+      networks: ["10.0.0.0/8", "192.168.0.0/16"]  # CIDR networks
+      hosts: ["example.com"]  # Hostnames
+
+    # Port range filtering
+    portRanges:
+      - lower: 80
+        upper: 443
+      - lower: 8000
+        upper: 9000

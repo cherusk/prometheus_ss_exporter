@@ -13,7 +13,7 @@ services:
       - CONFIG_FILE=/config.yml
       - LOG_LEVEL=INFO
     volumes:
-      - ./config.yml:/config.yml:ro
+      - ./example/config.yml:/config.yml:ro
     ports:
       - "8020:8020"
     healthcheck:
@@ -22,7 +22,7 @@ services:
       timeout: 10s
       retries: 3
       start_period: 10s
-    command: ["./prometheus_ss_exporter", "--port=8020", "--config=/config.yaml"]
+    command: ["./prometheus_ss_exporter", "--port=8020", "--config=/config.yml"]
     labels:
       - "prometheus.job=socket-stats-prometheus-nim"
       - "version=nim-2.1.1"
