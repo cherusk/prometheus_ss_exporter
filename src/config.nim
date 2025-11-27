@@ -7,12 +7,16 @@ import std/[options, strutils, logging, os]
 import yaml
 
 type
-  HistogramConfig* = object
-    active*: bool
-    bucketBounds*: seq[float]
-
   IndividualMetricConfig* = object
     active*: bool
+
+  HistogramConfig* = object
+    active*: bool
+    rtt*: RttHistogramConfig
+
+  RttHistogramConfig* = object
+    active*: bool
+    bucketBounds*: seq[float]
 
   GaugeConfig* = object
     active*: bool
@@ -76,7 +80,7 @@ proc loadConfig*(configPath: string): Option[ExporterConfig] =
     
     # Set defaults
     result.get.logic.metrics.histograms.active = false
-    result.get.logic.metrics.histograms.bucketBounds = @[0.1, 0.5, 1.0, 5.0, 10.0, 50.0, 100.0, 200.0, 500.0]
+    result.get.logic.metrics.histograms.rtt = RttHistogramConfig(active: false, bucketBounds: @[0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 25.0, 50.0, 100.0, 250.0, 500.0, 1000.0])
     result.get.logic.metrics.gauges.active = true
     result.get.logic.metrics.gauges.rtt = IndividualMetricConfig(active: true)
     result.get.logic.metrics.gauges.cwnd = IndividualMetricConfig(active: true)
@@ -103,23 +107,23 @@ logic:
   metrics:
     histograms:
       active: true
-      latency:
+      rtt:
         active: true
-        bucket_bounds: [0.10, 0.50, 1.00, 5.00, 10.00, 50.00, 100.00, 200.00, 500.00]
+        bucketBounds: [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 25.0, 50.0, 100.0, 250.0, 500.0, 1000.0]
     
     gauges:
       active: true
       rtt: { active: true }
       cwnd: { active: true }
-      delivery_rate: { active: true }
+      deliveryRate: { active: true }
     
     counters:
       active: true
-      data_segs_in: { active: true }
-      data_segs_out: { active: true }
+      dataSegsIn: { active: true }
+      dataSegsOut: { active: true }
   
   compression:
-    label_folding: "raw_endpoint"  # or "pid_condensed"
+    labelFolding: "raw_endpoint"  # or "pid_condensed"
   
   selection:
     # Optional filtering rules
@@ -136,7 +140,7 @@ logic:
       hosts: ["example.com"]  # Hostnames
     
     # Port range filtering
-    portranges:
+    portRanges:
       - lower: 80
         upper: 443
       - lower: 8000

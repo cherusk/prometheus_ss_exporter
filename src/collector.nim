@@ -125,8 +125,9 @@ proc newSocketCollector*(config: config.ExporterConfig): SocketCollector =
   if metricsConfig.counters.active and metricsConfig.counters.dataSegsOut.active:
     result.tcpDataSegsOutCounter = some(counter("tcp_data_segs_out"))
   
-  # Register histogram metrics
-  if metricsConfig.histograms.active:
+  # Register RTT histogram metric
+  if metricsConfig.histograms.active and metricsConfig.histograms.rtt.active:
+    let bucketBounds = metricsConfig.histograms.rtt.bucketBounds
     result.tcpRttHistogram = some(histogram("tcp_rtt_hist_ms"))
 
 proc collect*(collector: SocketCollector) =
