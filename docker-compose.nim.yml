@@ -22,7 +22,7 @@ services:
       timeout: 10s
       retries: 3
       start_period: 10s
-    command: ["./prometheus_ss_exporter", "--port=8020", "--config=/config.yml"]
+    command: ["./prometheus_ss_exporter", "--port=8020", "--config=/config.yaml"]
     labels:
       - "prometheus.job=socket-stats-prometheus-nim"
       - "version=nim-2.1.1"
