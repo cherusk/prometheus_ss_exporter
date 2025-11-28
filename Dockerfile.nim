@@ -27,8 +27,12 @@ RUN nimble install -y -d
 # Copy source code
 COPY src/ ./src/
 
-# Build the application using stable options like godon with verbose output
-RUN nimble build -v -d:release -d:metrics --threads:on
+# Extract version from build arg or nimble file and build the application
+ARG VERSION
+RUN BUILD_VERSION=${VERSION:-$(grep '^version\s*=' ss_exporter.nimble | cut -d'"' -f2 | tr -d ' ')} && \
+    echo "Building version: ${BUILD_VERSION}" && \
+    echo "Build arg VERSION: ${VERSION}" && \
+    nimble build -v -d:release -d:metrics --threads:on -d:version="${BUILD_VERSION}"
 
 # Final stage
 FROM ubuntu:22.04
