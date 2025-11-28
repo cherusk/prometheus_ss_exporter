@@ -70,7 +70,7 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-      
+
       - name: Validate security configuration
         run: |
           echo "✅ Security validation passed"
