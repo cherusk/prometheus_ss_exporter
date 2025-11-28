@@ -156,6 +156,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
+          file: ./Dockerfile.nim
           platforms: linux/amd64  # Single platform as requested
           push: true
           tags: ${{ steps.meta.outputs.tags }}
