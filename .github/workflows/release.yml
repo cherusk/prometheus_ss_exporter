@@ -149,7 +149,7 @@ jobs:
             # Custom labels for our use case
             maintainer=Matthias Tafelmeier <matthias.tafelmeier@gmx.net>
             prometheus.exporter.type=socket_statistics
-            prometheus.exporter.port=8090
+            prometheus.exporter.port=8020
 
       - name: Build and push Docker image with security and caching
         id: build

@@ -30,7 +30,7 @@ import metrics/chronos_httpserver
 import config, ss2_wrapper, collector
 
 const
-  version = "2.1.1"
+  version {.strdefine.} = "2.1.1"  # Can be overridden with -d:version="X.Y.Z"
   appName = "Prometheus Socket Statistics Exporter (Nim)"
 
 proc setupLogging*(level: Level = lvlInfo) =
