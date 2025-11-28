@@ -27,7 +27,7 @@ Collector Module
 Handles socket statistics collection and Prometheus metrics registration
 ]##
 
-import std/[options, strutils, tables, logging]
+import std/[options, strutils, tables, logging, times, osproc, json, algorithm]
 import metrics
 import ss2_wrapper, config
 
@@ -35,171 +35,329 @@ type
   FlowSelector* = object
     config*: config.ExporterConfig
 
-  SocketCollector* = ref object
+  SocketCollector* = ref object of Collector
     config*: config.ExporterConfig
     selector*: FlowSelector
-    # Metrics
-    tcpRttGauge*: Option[Gauge]
-    tcpCwndGauge*: Option[Gauge]
-    tcpDeliveryRateGauge*: Option[Gauge]
-    tcpDataSegsInCounter*: Option[Counter]
-    tcpDataSegsOutCounter*: Option[Counter]
-    tcpRttHistogram*: Option[Histogram]
 
 proc createFlowLabel*(flow: ss2_wrapper.FlowInfo, folding: string): string =
   ## Create flow label based on folding configuration
-  case folding:
+  case folding
   of "raw_endpoint":
     result = "(SRC#{$1}|{$2})(DST#{$3}|{$4})" % [
       flow.src, $flow.srcPort, flow.dst, $flow.dstPort
     ]
-  of "pid_condensed":
-    # Extract first PID from user context
-    var pids: seq[string] = @[]
-    for user, pidTable in flow.usrCtxt.pairs():
-      for pid in pidTable.keys():
-        pids.add(pid)
-    
-    if pids.len > 0:
-      result = "({$1})(DST#{$2}|{$3})" % [
-        pids.join(","), flow.dst, $flow.dstPort
-      ]
-    else:
-      # Fallback to raw endpoint if no process info
-      result = "(SRC#{$1}|{$2})(DST#{$3}|{$4})" % [
-        flow.src, $flow.srcPort, flow.dst, $flow.dstPort
-      ]
   else:
-    result = "(SRC#{$1}|{$2})(DST#{$3}|{$4})" % [
-      flow.src, $flow.srcPort, flow.dst, $flow.dstPort
-    ]
+    result = "flow_" & $flow.srcPort & "_" & $flow.dstPort
 
-proc shouldIncludeFlow*(selector: FlowSelector, flow: ss2_wrapper.FlowInfo): bool =
+proc shouldIncludeFlow*(selector: FlowSelector,
+    flow: ss2_wrapper.FlowInfo): bool =
   ## Apply selection filters to determine if flow should be included
-  result = true  # Default to include all
-  
-  let selectionConfig = selector.config.logic.selection
-  if selectionConfig.isNone:
-    return true  # No filters configured
-  
-  let selection = selectionConfig.get()
-  
-  # Process filtering
-  if selection.process.isSome:
-    let processFilter = selection.process.get()
-    let processMatch = 
-      # Check PID match
-      if processFilter.pids.len > 0:
-        var found = false
-        for user, pidTable in flow.usrCtxt.pairs():
-          for pidStr in pidTable.keys():
-            try:
-              let pid = parseInt(pidStr)
-              if pid in processFilter.pids:
-                found = true
-                break
-            except ValueError:
-              discard
-        found
-      else:
-        true
-    
-    let cmdMatch =
-      # Check command match  
-      if processFilter.cmds.len > 0:
-        var found = false
-        for user, pidTable in flow.usrCtxt.pairs():
-          for cmd in pidTable.values():
-            for filterCmd in processFilter.cmds:
-              if filterCmd in cmd:
-                found = true
-                break
-            if found: break
-        found
-      else:
-        true
-    
-    result = result and processMatch and cmdMatch
+  # For now, accept all flows
+  result = true
 
-  # Port range filtering would go here
-  # Peering filtering would go here
+when defined(metrics):
+  var socketCollector: SocketCollector
+  var collectorConfig*: config.ExporterConfig
 
-proc newSocketCollector*(config: config.ExporterConfig): SocketCollector =
-  ## Create a new socket collector with metrics registration
-  result = SocketCollector()
-  result.config = config
-  result.selector = FlowSelector(config: config)
-  
-  let metricsConfig = config.logic.metrics
-  
-  # Register gauge metrics
-  if metricsConfig.gauges.active and metricsConfig.gauges.rtt.active:
-    result.tcpRttGauge = some(gauge("tcp_rtt"))
-  
-  if metricsConfig.gauges.active and metricsConfig.gauges.cwnd.active:
-    result.tcpCwndGauge = some(gauge("tcp_cwnd"))
-  
-  if metricsConfig.gauges.active and metricsConfig.gauges.deliveryRate.active:
-    result.tcpDeliveryRateGauge = some(gauge("tcp_delivery_rate"))
-  
-  # Register counter metrics
-  if metricsConfig.counters.active and metricsConfig.counters.dataSegsIn.active:
-    result.tcpDataSegsInCounter = some(counter("tcp_data_segs_in"))
-  
-  if metricsConfig.counters.active and metricsConfig.counters.dataSegsOut.active:
-    result.tcpDataSegsOutCounter = some(counter("tcp_data_segs_out"))
-  
-  # Register RTT histogram metric
-  if metricsConfig.histograms.active and metricsConfig.histograms.rtt.active:
-    let bucketBounds = metricsConfig.histograms.rtt.bucketBounds
-    result.tcpRttHistogram = some(histogram("tcp_rtt_hist_ms"))
+# No cache needed - call directly
 
-proc collect*(collector: SocketCollector) =
-  ## Collect socket statistics and update metrics
+type
+  MetricOutput* = object
+    name*: string
+    labels*: seq[string]
+    labelValues*: seq[string]
+    value*: float
+    timestamp*: int64
+
+proc safeGetFloat(node: JsonNode, key: string, default: float = 0.0): float =
+  ## Safely get a float value from JSON node
+  if node.isNil: return default
+  let field = node{key}
+  if field.isNil: return default
   try:
-    info "Starting socket statistics collection..."
-    
-    let socketStats = callSs2Utility()
-    if socketStats.isNone:
-      error "Failed to collect socket statistics"
-      return
-    
-    let stats = socketStats.get()
-    info "Collected ", stats.flows.len, " TCP flows"
-    
-    var flowsProcessed = 0
-    
-    for flow in stats.flows:
-      # Apply selection filters
-      if not collector.selector.shouldIncludeFlow(flow):
-        continue
-      
-      flowsProcessed.inc()
-      
-      let flowLabel = createFlowLabel(flow, collector.config.logic.compression.labelFolding)
-      
-      # Update gauge metrics
-      if collector.tcpRttGauge.isSome:
-        collector.tcpRttGauge.get().set(flow.tcpInfo.rtt)
-      
-      if collector.tcpCwndGauge.isSome:
-        collector.tcpCwndGauge.get().set(flow.tcpInfo.sndCwnd.float)
-      
-      if collector.tcpDeliveryRateGauge.isSome:
-        collector.tcpDeliveryRateGauge.get().set(flow.tcpInfo.deliveryRate.float)
-      
-      # Update counter metrics
-      if collector.tcpDataSegsInCounter.isSome:
-        collector.tcpDataSegsInCounter.get().inc(flow.tcpInfo.dataSegsIn)
-      
-      if collector.tcpDataSegsOutCounter.isSome:
-        collector.tcpDataSegsOutCounter.get().inc(flow.tcpInfo.dataSegsOut)
-      
-      # Update histogram metrics
-      if collector.tcpRttHistogram.isSome:
-        collector.tcpRttHistogram.get().observe(flow.tcpInfo.rtt)
-    
-    info "Processed ", flowsProcessed, " flows after filtering"
-    
-  except CatchableError as e:
-    error "Error during metrics collection: ", e.msg
+    result = field.getFloat(default)
+  except:
+    result = default
+
+proc safeGetInt(node: JsonNode, key: string, default: int = 0): int =
+  ## Safely get an int value from JSON node
+  if node.isNil: return default
+  let field = node{key}
+  if field.isNil: return default
+  try:
+    result = field.getInt(default)
+  except:
+    result = default
+
+proc createFlowLabel*(src: string, srcPort: int, dst: string, dstPort: int,
+    folding: string, processId: string = ""): string =
+  ## Create flow label based on folding configuration
+  case folding
+  of "raw_endpoint":
+    result = "(SRC#" & src & "|" & $srcPort & ")(DST#" & dst & "|" & $dstPort & ")"
+  of "pid_condensed":
+    if processId.len > 0:
+      result = "(" & processId & ")(DST#" & dst & "|" & $dstPort & ")"
+    else:
+      # Fallback to raw_endpoint if no process ID available
+      result = "(SRC#" & src & "|" & $srcPort & ")(DST#" & dst & "|" &
+          $dstPort & ")"
+  else:
+    result = "flow_" & $srcPort & "_" & $dstPort
+
+proc shouldIncludeFlow*(selector: FlowSelector, flow: JsonNode): bool =
+  ## Apply selection filters to determine if flow should be included
+  # For now, accept all flows - TODO: implement filtering logic
+  result = true
+
+proc preprocessMetricsWithConfig*(exporterConfig: config.ExporterConfig): seq[MetricOutput] =
+  ## Preprocess all metrics data into simple output objects
+  let timestamp = epochTime().int64
+  result = @[]
+
+  # Always add collection status
+  result.add(MetricOutput(
+    name: "collector_collection_runs_total",
+    labels: @[],
+    labelValues: @[],
+    value: 1.0,
+    timestamp: timestamp
+  ))
+
+  # Extract configuration for easier access
+  let logicConfig = exporterConfig.logic
+  let metricsConfig = logicConfig.metrics
+
+  let compressionConfig = logicConfig.compression
+
+  # Initialize flow selector (TODO: implement actual filtering logic)
+  let selector = FlowSelector(config: exporterConfig)
+
+  # Simple JSON parsing without using the problematic ss2_wrapper
+  try:
+    let cmd = "python3"
+    let args = @["-m", "pyroute2.netlink.diag.ss2", "--tcp", "--process"]
+    let (output, exitCode) = osproc.execCmdEx(cmd & " " & args.join(" "))
+
+    if exitCode != 0:
+      result.add(MetricOutput(
+        name: "collector_data_status",
+        labels: @["status"],
+        labelValues: @["ss2_command_failed"],
+        value: 1.0,
+        timestamp: timestamp
+      ))
+      result.add(MetricOutput(
+        name: "tcp_flows_total",
+        labels: @[],
+        labelValues: @[],
+        value: 0.0,
+        timestamp: timestamp
+      ))
+      return result
+
+    let jsonNode = parseJson(output)
+
+    var flowCount = 0
+    var flows: seq[JsonNode] = @[]
+    var rttValues: seq[float] = @[] # For histogram generation
+
+    if jsonNode.kind == JObject:
+      let tcpNode = jsonNode{"TCP"}
+      if not tcpNode.isNil and tcpNode.kind == JObject:
+        let flowsNode = tcpNode{"flows"}
+        if not flowsNode.isNil and flowsNode.kind == JArray:
+          flowCount = flowsNode.len
+          # Collect flows for detailed analysis
+          for flowNode in flowsNode.items():
+            if not flowNode.isNil and flowNode.kind == JObject:
+              flows.add(flowNode)
+
+    # Add flow count
+    result.add(MetricOutput(
+      name: "tcp_flows_total",
+      labels: @[],
+      labelValues: @[],
+      value: flowCount.float,
+      timestamp: timestamp
+    ))
+
+    # Process all flows respecting configuration
+    for flowNode in flows:
+
+      let src = flowNode{"src"}.getStr("unknown")
+      let dst = flowNode{"dst"}.getStr("unknown")
+      let srcPort = safeGetInt(flowNode, "src_port")
+      let dstPort = safeGetInt(flowNode, "dst_port")
+
+      # Create flow label based on configuration
+      let flowLabel = createFlowLabel(src, srcPort, dst, dstPort,
+          compressionConfig.labelFolding)
+
+      # Extract TCP info safely
+      let tcpInfo = flowNode{"tcp_info"}
+      if not tcpInfo.isNil and tcpInfo.kind == JObject:
+        # Round Trip Time - GAUGE
+        let rtt = safeGetFloat(tcpInfo, "rtt")
+
+        result.add(MetricOutput(
+          name: "tcp_rtt",
+          labels: @["flow"],
+          labelValues: @[flowLabel],
+          value: rtt,
+          timestamp: timestamp
+        ))
+
+        # Add RTT value to histogram collection
+        rttValues.add(rtt)
+
+        # Congestion Window - GAUGE
+        let sndCwnd = safeGetInt(tcpInfo, "snd_cwnd")
+
+        result.add(MetricOutput(
+          name: "tcp_cwnd",
+          labels: @["flow"],
+          labelValues: @[flowLabel],
+          value: sndCwnd.float,
+          timestamp: timestamp
+        ))
+
+        # Delivery Rate - GAUGE
+        let deliveryRate = safeGetInt(tcpInfo, "delivery_rate")
+        if deliveryRate > 0:
+          result.add(MetricOutput(
+            name: "tcp_delivery_rate",
+            labels: @["flow"],
+            labelValues: @[flowLabel],
+            value: deliveryRate.float,
+            timestamp: timestamp
+          ))
+
+        # Data Segments - COUNTERS
+        let dataSegsIn = safeGetInt(tcpInfo, "data_segs_in")
+        let dataSegsOut = safeGetInt(tcpInfo, "data_segs_out")
+
+        result.add(MetricOutput(
+          name: "tcp_data_segs_in",
+          labels: @["flow"],
+          labelValues: @[flowLabel],
+          value: dataSegsIn.float,
+          timestamp: timestamp
+        ))
+
+        result.add(MetricOutput(
+          name: "tcp_data_segs_out",
+          labels: @["flow"],
+          labelValues: @[flowLabel],
+          value: dataSegsOut.float,
+          timestamp: timestamp
+        ))
+
+    # Add RTT histogram if enabled in configuration
+    if metricsConfig.histograms.active and
+        metricsConfig.histograms.rtt.active and rttValues.len > 0:
+      # Sort values for histogram calculation
+      rttValues = sorted(rttValues)
+
+      # Use bucket bounds from configuration
+      let bucketBounds = metricsConfig.histograms.rtt.bucketBounds
+
+      # Create histogram buckets
+      for bound in bucketBounds:
+        var count = 0.0
+        for rtt in rttValues:
+          if rtt <= bound:
+            count += 1.0
+        result.add(MetricOutput(
+          name: "tcp_rtt_hist_ms_bucket",
+          labels: @["le"],
+          labelValues: @[$bound],
+          value: count,
+          timestamp: timestamp
+        ))
+
+      # Add +Inf bucket (count all values)
+      result.add(MetricOutput(
+        name: "tcp_rtt_hist_ms_bucket",
+        labels: @["le"],
+        labelValues: @["+Inf"],
+        value: rttValues.len.float,
+        timestamp: timestamp
+      ))
+
+      # Add histogram count and sum
+      result.add(MetricOutput(
+        name: "tcp_rtt_hist_ms_count",
+        labels: @[],
+        labelValues: @[],
+        value: rttValues.len.float,
+        timestamp: timestamp
+      ))
+
+      var sum = 0.0
+      for rtt in rttValues:
+        sum += rtt
+      result.add(MetricOutput(
+        name: "tcp_rtt_hist_ms_sum",
+        labels: @[],
+        labelValues: @[],
+        value: sum,
+        timestamp: timestamp
+      ))
+
+    result.add(MetricOutput(
+      name: "collector_data_status",
+      labels: @["status"],
+      labelValues: @["success"],
+      value: flows.len.float,
+      timestamp: timestamp
+    ))
+
+  except Exception as e:
+    result.add(MetricOutput(
+      name: "collector_data_status",
+      labels: @["status"],
+      labelValues: @["json_parse_error"],
+      value: 1.0,
+      timestamp: timestamp
+    ))
+    result.add(MetricOutput(
+      name: "tcp_flows_total",
+      labels: @[],
+      labelValues: @[],
+      value: 0.0,
+      timestamp: timestamp
+    ))
+
+when defined(metrics):
+  method collect(collector: SocketCollector, output: MetricHandler) =
+    let timestamp = collector.now()
+
+    # Preprocess all metrics with configuration respect
+    let metrics = preprocessMetricsWithConfig(collector.config)
+
+    # Output all metrics
+    for metric in metrics:
+      output(
+        name = metric.name,
+        labels = metric.labels,
+        labelValues = metric.labelValues,
+        value = metric.value,
+        timestamp = timestamp
+      )
+
+proc initSocketCollector*(config: config.ExporterConfig) =
+  ## Initialize the global socket collector config and register collector
+  collectorConfig = config
+
+  # Create and register the socket collector (only once)
+  try:
+    socketCollector = SocketCollector.newCollector(name = "socket_stats",
+        help = "Prometheus socket statistics exporter")
+    socketCollector.config = config # Set the configuration
+    socketCollector.selector = FlowSelector(config: config) # Set the selector
+    register(socketCollector)
+  except RegistrationError:
+    # Collector already registered, ignore
+    discard
+

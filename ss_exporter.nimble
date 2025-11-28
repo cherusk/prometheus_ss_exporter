@@ -33,8 +33,8 @@ bin           = @["prometheus_ss_exporter"]
 
 # Dependencies
 requires "nim >= 2.0"
-requires "https://github.com/status-im/nim-metrics#head"
-requires "https://github.com/status-im/nim-chronos#head"
+requires "metrics"
+requires "chronos"
 requires "yaml >= 1.1.0"
 requires "cligen >= 1.6"
 

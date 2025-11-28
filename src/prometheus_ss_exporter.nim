@@ -23,11 +23,11 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ]##
 
-import std/[os, strutils, logging, options, times, osproc, parseopt, sequtils, tables]
-import chronos
+import std/[os, strutils, logging, options, times, osproc, parseopt, sequtils,
+    tables, strformat]
 import metrics
 import metrics/chronos_httpserver
-import config, collector
+import config, ss2_wrapper, collector
 
 const
   version = "2.1.1"
@@ -64,15 +64,15 @@ Examples:
   prometheus_ss_exporter --create-config:config.yml         # Create sample config
 """
 
-proc main*(port = 8020, configFile = "config.yml", logLevel = "INFO", 
+proc main*(port = 8020, configFile = "config.yml", logLevel = "INFO",
            createConfig = "") =
   ## Main entry point for the Prometheus socket statistics exporter
-  
+
   # Handle config creation request
   if createConfig.len > 0:
     createSampleConfig(createConfig)
     return
-  
+
   # Setup logging
   let level = case logLevel.toUpperAscii():
     of "DEBUG": lvlDebug
@@ -80,49 +80,44 @@ proc main*(port = 8020, configFile = "config.yml", logLevel = "INFO",
     of "WARN": lvlWarn
     of "ERROR": lvlError
     else: lvlInfo
-  
+
   setupLogging(level)
-  
+
   info "Starting ", appName, " v", version
   info "Nim compiler version: ", NimVersion
   info "Process ID: ", getCurrentProcessId()
-  
+
   # Load configuration
   let configResult = loadConfig(configFile)
   if configResult.isNone:
     error "Failed to load configuration from: ", configFile
     error "Use --create-config:", configFile, " to create a sample configuration"
     quit(QuitFailure)
-  
+
   let config = configResult.get()
   info "Configuration loaded successfully from: ", configFile
-  
-  # Initialize socket collector
-  var collector = newSocketCollector(config)
-  info "Socket collector initialized"
-  
-  # Setup signal handling for graceful shutdown
-  proc handleSignals() {.async.} =
-    # Simple sleep loop that can be interrupted by exceptions
-    while true:
-      await sleepAsync(1000)  # Sleep for 1 second, can be interrupted
-  
-  # Start metrics HTTP server
+
+  # Initialize and start the metrics collector
+  initSocketCollector(config)
+
+  # Start Prometheus metrics HTTP server using available API
+  info "Starting Prometheus metrics HTTP server..."
   try:
+    # Use the deprecated but functional startMetricsHttpServer for now
+    # TODO: Replace with modern API once available and documented
     chronos_httpserver.startMetricsHttpServer("0.0.0.0", Port(port))
+    info "Prometheus metrics HTTP server started successfully on port ", port
+    info "Metrics endpoint: http://localhost:", port, "/metrics"
+
+    # Keep the main thread alive
+    while true:
+      sleep(1000)
+
   except CatchableError as e:
     error "Failed to start metrics HTTP server: ", e.msg
+    error "Exception details: ", e.name, ": ", e.msg
+    error "Stack trace: ", e.getStackTrace()
     quit(QuitFailure)
-  
-  info "Server started successfully!"
-  info "Metrics endpoint: http://localhost:", port, "/metrics"
-  
-  # Wait for signals
-  try:
-    waitFor handleSignals()
-  except CatchableError as e:
-    info "Shutting down..."
-    quit(QuitSuccess)
 
 proc parseArgs(): Table[string, string] =
   var args = initTable[string, string]()
@@ -151,19 +146,19 @@ proc parseArgs(): Table[string, string] =
         quit(QuitSuccess)
     of cmdEnd:
       break
-  
+
   return args
 
 when isMainModule:
   # Parse command line arguments
   let args = parseArgs()
-  
+
   # Set defaults and override with parsed arguments
   var port = 8020
   var configFile = "config.yml"
   var logLevel = "INFO"
   var createConfig = ""
-  
+
   # Apply parsed arguments with validation
   if args.contains("port"):
     let portStr = args["port"]
@@ -175,26 +170,26 @@ when isMainModule:
     except ValueError:
       echo "Error: --port requires a valid numeric value, got: ", portStr
       quit(QuitFailure)
-  
+
   if args.contains("config"):
     let configStr = args["config"]
     if configStr.len == 0:
       echo "Error: --config requires a file path"
       quit(QuitFailure)
     configFile = configStr
-  
+
   if args.contains("log-level"):
     let logStr = args["log-level"]
     if logStr.len == 0:
       echo "Error: --log-level requires a value (DEBUG, INFO, WARN, ERROR)"
       quit(QuitFailure)
     logLevel = logStr
-  
+
   if args.contains("create-config"):
     let createStr = args["create-config"]
     if createStr.len == 0:
       echo "Error: --create-config requires a file path"
       quit(QuitFailure)
     createConfig = createStr
-  
+
   main(port, configFile, logLevel, createConfig)
