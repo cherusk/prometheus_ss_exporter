@@ -37,7 +37,7 @@ jobs:
             VERSION="${{ github.event.release.tag_name }}"
             IS_LATEST="true"  # Assume release events create latest
           else
-            echo "Manual release tags not supported yet.
+            echo "Manual release tags not supported yet."
             exit 2
           fi
 
