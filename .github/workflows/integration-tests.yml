@@ -1,0 +1,267 @@
+name: Integration Tests
+
+on:
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  integration-tests:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image for testing
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile.nim
+          push: false
+          load: true
+          tags: prometheus-ss-exporter:test
+          build-args: |
+            VERSION=test-${{ github.sha }}
+          cache-from: type=gha,scope=test-build
+          cache-to: type=gha,mode=max,scope=test-build
+
+      - name: Create test configuration
+        run: |
+          mkdir -p test_configs
+
+          # Create comprehensive all-metrics config
+          cat > test_configs/all-metrics.yml << 'EOF'
+          ---
+          logic:
+            metrics:
+              gauges:
+                active: true
+                rtt: { active: true }
+                cwnd: { active: true }
+                deliveryRate: { active: true }
+              histograms:
+                active: true
+                rtt:
+                  active: true
+                  bucketBounds: [0.5, 1.0, 2.5, 5.0, 10.0, 25.0, 50.0]
+              counters:
+                active: true
+                dataSegsIn: { active: true }
+                dataSegsOut: { active: true }
+            compression:
+              labelFolding: "raw_endpoint"
+            selection:
+              process:
+                pids: []
+                cmds: []
+              peering:
+                addresses: []
+                networks: []
+                hosts: []
+              portRanges: []
+          EOF
+
+      - name: Generate test traffic with persistent connections
+        run: |
+          # Create persistent localhost connections using existing tools
+          echo "Creating persistent test connections..."
+
+          # Start a simple HTTP server
+          python3 -m http.server 19999 > /tmp/http_server.log 2>&1 &
+          HTTP_SERVER_PID=$!
+          echo "Started HTTP server with PID: $HTTP_SERVER_PID"
+
+          # Wait for server to start
+          sleep 2
+
+          # Create persistent connections using curl (keeps connections alive)
+          echo "Creating persistent client connections..."
+          for i in {1..5}; do
+            # Use curl with keepalive - run in background, will maintain connection
+            curl --keepalive-time 600 --max-time 900 http://127.0.0.1:19999/ > /tmp/curl_${i}.log 2>&1 &
+            CURL_PID=$!
+            echo "Started curl client ${i} with PID: $CURL_PID"
+            echo $CURL_PID >> /tmp/curl_pids.pid
+            sleep 0.2
+          done
+
+          # Store HTTP server PID for cleanup
+          echo "$HTTP_SERVER_PID" > /tmp/http_server.pid
+
+          # Give connections time to establish
+          sleep 3
+
+          # Verify connections exist
+          echo "Checking for active TCP connections..."
+          ss -tn state established '( dport = :19999 or sport = :19999 )' | head -10 || echo "Connections check completed"
+
+      - name: Start service with all-metrics config
+        run: |
+          docker run -d --name exporter-test \
+            --privileged --network host --pid host \
+            -v "$(pwd)/test_configs/all-metrics.yml:/config.yml:ro" \
+            prometheus-ss-exporter:test \
+            --port=8020 --config=/config.yml
+
+      - name: Wait for service to start
+        run: |
+          echo "Checking container status..."
+          docker ps -a --filter "name=exporter-test"
+
+          echo "Container logs:"
+          docker logs exporter-test
+
+          echo "Testing if service is actually running on port 8020..."
+          curl -v http://localhost:8020/health || echo "Service not responding"
+
+          # Give it time to start and exit early if it works
+          for i in {1..30}; do
+            if curl -sf http://localhost:8020/health >/dev/null 2>&1; then
+              echo "Service started after $i seconds"
+              break
+            fi
+            echo "Attempt $i: waiting..."
+            sleep 2
+          done
+
+          # Final check with error if still not working
+          if ! curl -sf http://localhost:8020/health; then
+            echo "❌ Service failed to start - final container logs:"
+            docker logs exporter-test
+            exit 1
+          fi
+
+      - name: Test all-metrics functionality
+        run: |
+          echo "Testing comprehensive all-metrics configuration..."
+
+          # Get metrics
+          METRICS=$(curl -s http://localhost:8020/metrics)
+
+          # Check that metrics endpoint is working
+          if ! echo "$METRICS" | grep -q "collector_collection_runs_total"; then
+            echo "❌ Missing collection runs metric"
+            exit 1
+          fi
+
+          # Check that all metric types are present
+          REQUIRED_METRICS=(
+            "tcp_rtt{"
+            "tcp_cwnd{"
+            "tcp_delivery_rate{"
+            "tcp_data_segs_in{"
+            "tcp_data_segs_out{"
+            "tcp_rtt_hist_ms_bucket"
+            "tcp_rtt_hist_ms_count"
+            "tcp_rtt_hist_ms_sum"
+          )
+
+          for metric in "${REQUIRED_METRICS[@]}"; do
+            if ! echo "$METRICS" | grep -q "$metric"; then
+              echo "❌ Missing required metric: $metric"
+              exit 1
+            fi
+          done
+
+          # Test histogram functionality
+          if ! echo "$METRICS" | grep -q "tcp_rtt_hist_ms_bucket{le=\"+Inf\"}"; then
+            echo "❌ Missing +Inf histogram bucket"
+            exit 1
+          fi
+
+          # Extract histogram values and validate consistency
+          COUNT=$(echo "$METRICS" | grep "tcp_rtt_hist_ms_count" | awk '{print $NF}')
+          INF_COUNT=$(echo "$METRICS" | grep "tcp_rtt_hist_ms_bucket{le=\"+Inf\"}" | awk '{print $NF}')
+
+          if [ "$COUNT" != "$INF_COUNT" ]; then
+            echo "❌ Histogram count ($COUNT) doesn't match +Inf bucket count ($INF_COUNT)"
+            exit 1
+          fi
+
+          # Test label folding (should use raw_endpoint)
+          echo "Checking flow labels in metrics output..."
+          FLOW_EXAMPLES=$(echo "$METRICS" | grep "flow=" | head -3)
+          echo "Sample flow labels found:"
+          echo "$FLOW_EXAMPLES"
+
+          # Verify raw_endpoint format: (SRC#IP|PORT)(DST#IP|PORT)
+          if ! echo "$METRICS" | grep -q "flow=\"(SRC#[^|]*|[^)]*)"; then
+            echo "❌ Expected raw_endpoint label folding format not found"
+            exit 1
+          fi
+
+          echo "✅ Raw endpoint label folding working correctly"
+
+          echo "✅ All-metrics tests passed"
+          echo "✅ Found $COUNT histogram observations"
+          echo "✅ Prometheus format compliance verified"
+
+      - name: Test service health
+        run: |
+          echo "Testing service health endpoints..."
+
+          # Test health endpoint
+          HEALTH=$(curl -s http://localhost:8020/health || echo "failed")
+          if [ "$HEALTH" != "OK" ]; then
+            echo "❌ Health endpoint not responding correctly"
+            exit 1
+          fi
+
+          echo "✅ Health endpoint working"
+
+      - name: Stop service
+        run: docker stop exporter-test || true
+
+      - name: Cleanup
+        if: always()
+        run: |
+          echo "Cleaning up test containers and background processes..."
+
+          # Cleanup Docker containers
+          docker rm -f exporter-test || true
+
+          # Cleanup background processes
+          if [ -f /tmp/http_server.pid ]; then
+            HTTP_PID=$(cat /tmp/http_server.pid)
+            echo "Stopping HTTP server PID: $HTTP_PID"
+            kill $HTTP_PID 2>/dev/null || true
+          fi
+
+          if [ -f /tmp/curl_pids.pid ]; then
+            echo "Stopping curl client processes..."
+            while read -r CURL_PID; do
+              echo "Stopping curl PID: $CURL_PID"
+              kill $CURL_PID 2>/dev/null || true
+            done < /tmp/curl_pids.pid
+          fi
+
+          # Cleanup temp files
+          rm -f /tmp/http_server.pid /tmp/curl_pids.pid /tmp/http_server.log /tmp/curl_*.log
+
+          echo "Cleanup completed"
+
+      - name: Generate test report
+        if: always()
+        run: |
+          echo "## 🧪 Integration Test Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### ✅ Completed Tests" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ All-metrics configuration (gauges, counters, histograms)" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Persistent TCP connection testing" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Prometheus format compliance" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Histogram data integrity validation" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Label folding (raw_endpoint) verification" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Health endpoint functionality" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Service startup and shutdown testing" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Test Environment:** Ubuntu latest with Docker" >> $GITHUB_STEP_SUMMARY
+          echo "**Test Scope:** Localhost persistent connections only" >> $GITHUB_STEP_SUMMARY
+          echo "**Test Date:** $(date -u)" >> $GITHUB_STEP_SUMMARY

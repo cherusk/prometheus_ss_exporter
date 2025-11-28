@@ -22,7 +22,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ]#
 
-# Package configuration
+## Package configuration
 version       = "3.0.0"
 author        = "Matthias Tafelmeier"
 description   = "Prometheus socket statistics exporter - rewritten in Nim"
@@ -31,14 +31,14 @@ license       = "MIT"
 srcDir        = "src"
 bin           = @["prometheus_ss_exporter"]
 
-# Dependencies
+## Dependencies
 requires "nim >= 2.0"
 requires "metrics"
 requires "chronos"
 requires "yaml >= 1.1.0"
 requires "cligen >= 1.6"
 
-# Optional dependencies for development
+## Optional dependencies for development
 task test, "Run tests":
   exec "nim c -r tests/test_basic.nim"
 
