@@ -193,22 +193,22 @@ proc preprocessMetricsWithConfig*(exporterConfig: config.ExporterConfig): seq[Me
       # Extract process ID for pid_condensed label folding
       var processId = ""
       if compressionConfig.labelFolding == "pid_condensed":
-        # Try to extract process ID from flow data
-        let procInfo = flowNode{"proc_info"}
-        if not procInfo.isNil and procInfo.kind == JObject:
-          processId = procInfo{"pid"}.getStr("")
+        # Try usrCtxt (user context) - this is where process info is stored
+        let usrCtxtNode = flowNode{"usr_ctxt"}
+        if not usrCtxtNode.isNil and usrCtxtNode.kind == JObject:
+          for user, pidData in usrCtxtNode.pairs():
+            if pidData.kind == JObject:
+              for pid, cmdData in pidData.pairs():
+                processId = pid
+                break
+              if processId.len > 0:
+                break
         
-        # If no proc_info, try usrCtxt (user context)
+        # If no usrCtxt, try proc_info as fallback
         if processId.len == 0:
-          let usrCtxtNode = flowNode{"usr_ctxt"}
-          if not usrCtxtNode.isNil and usrCtxtNode.kind == JObject:
-            for user, pidData in usrCtxtNode.pairs():
-              if pidData.kind == JObject:
-                for pid, cmdData in pidData.pairs():
-                  processId = pid
-                  break
-                if processId.len > 0:
-                  break
+          let procInfo = flowNode{"proc_info"}
+          if not procInfo.isNil and procInfo.kind == JObject:
+            processId = procInfo{"pid"}.getStr("")
 
       # Create flow label based on configuration
       let flowLabel = createFlowLabel(src, srcPort, dst, dstPort,

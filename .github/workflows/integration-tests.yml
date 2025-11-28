@@ -107,6 +107,7 @@ jobs:
         run: |
           docker run -d --name exporter-test \
             --privileged --network host --pid host \
+            --user root \
             -v "$(pwd)/test_configs/all-metrics.yml:/config.yml:ro" \
             prometheus-ss-exporter:test \
             --port=8020 --config=/config.yml
@@ -193,12 +194,14 @@ jobs:
           echo "$FLOW_EXAMPLES"
 
           # Check if we got pid_condensed format (preferred) or fallback to raw_endpoint
-          if echo "$METRICS" | grep -q "flow=\"(PID#"; then
+          if echo "$METRICS" | grep -q "flow=\"([0-9]\+)(DST#"; then
             echo "✅ PID condensed label folding working correctly"
           elif echo "$METRICS" | grep -q "flow=\"(SRC#"; then
             echo "⚠️  PID condensed not available, using raw_endpoint fallback (expected in container)"
           else
             echo "❌ No valid flow label format found"
+            echo "Available flow patterns:"
+            echo "$METRICS" | grep "flow=" | head -3
             exit 1
           fi
 
