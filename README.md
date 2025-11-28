@@ -58,7 +58,7 @@ The exporter exposes the following Prometheus metrics:
 
 | Metric | Description | Labels | Buckets |
 |--------|-------------|--------|---------|
-| `tcp_rtt_hist_ms` | TCP round-trip time distribution histogram | None | Configurable (default: 0.1ms to 500ms) |
+| `tcp_rtt_hist_ms` | TCP round-trip time distribution histogram | `le` - bucket boundary | Configurable (default: 0.001ms to 1000ms) |
 
 ### Counter Metrics
 
@@ -135,7 +135,7 @@ tcp_rtt_hist_ms_sum 24.0
 
 ## Configuration
 
-The exporter is configured via a YAML file that controls metric collection, flow filtering, and label compression. Pass the configuration file path using the `CONFIG_FILE` environment variable.
+The exporter is configured via a YAML file that controls metric collection, flow filtering, and label compression. Use the `--config` command line argument to specify the configuration file path.
 
 ### Configuration Structure
 
@@ -146,34 +146,36 @@ logic:
   metrics:
     histograms:
       active: true
-      latency:
+      rtt:
         active: true
-        bucket_bounds: [0.10, 0.50, 1.00, 5.00, 10.00, 50.00, 100.00, 200.00, 500.00]
+        bucketBounds: [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 25.0, 50.0, 100.0, 250.0, 500.0, 1000.0]
     gauges:
       active: true
       rtt: { active: true }
       cwnd: { active: true }
-      delivery_rate: { active: true }
+      deliveryRate: { active: true }
     counters:
       active: true
-      data_segs_in: { active: true }
-      data_segs_out: { active: true }
+      dataSegsIn: { active: true }
+      dataSegsOut: { active: true }
   
   compression:
-    label_folding:
-      origin: "pid_condensed"
+    labelFolding: "raw_endpoint"  # or "pid_condensed"
   
   selection:
-    # Flow filtering options (optional)
+    # [Optional] filtering rules
     process:
-      pids: [200, 1500]
-      cmds: ["nginx", "postgres"]
+      pids: [1000, 2000]  # Specific process IDs
+      cmds: ["nginx", "apache2"]  # Process names
     peering:
-      addresses: ["8.8.4.4"]
-      networks: ["169.254.0.0/16"]
-      hosts: ["example.com"]
-    portranges:
-      - { lower: 2000, upper: 10000 }
+      addresses: ["8.8.8.8", "1.1.1.1"]  # Specific IPs
+      networks: ["10.0.0.0/8", "192.168.0.0/16"]  # CIDR networks
+      hosts: ["example.com"]  # Hostnames
+    portRanges:
+      - lower: 80
+        upper: 443
+      - lower: 8000
+        upper: 9000
 ```
 
 ### Configuration Options
@@ -184,26 +186,26 @@ Controls which metrics are collected and exposed.
 
 **Histograms**
 - `active`: Enable/disable histogram collection globally
-- `latency.active`: Enable TCP round-trip time histogram
-- `latency.bucket_bounds`: Array of latency bucket boundaries in milliseconds
+- `rtt.active`: Enable TCP round-trip time histogram
+- `rtt.bucketBounds`: Array of latency bucket boundaries in milliseconds
 
 **Gauges**
 - `active`: Enable/disable gauge collection globally
 - `rtt.active`: Enable TCP round-trip time gauge
 - `cwnd.active`: Enable TCP congestion window gauge
-- `delivery_rate.active`: Enable TCP delivery rate gauge
+- `deliveryRate.active`: Enable TCP delivery rate gauge
 
 **Counters**
 - `active`: Enable/disable counter collection globally
-- `data_segs_in.active`: Enable incoming data segments counter
-- `data_segs_out.active`: Enable outgoing data segments counter
+- `dataSegsIn.active`: Enable incoming data segments counter
+- `dataSegsOut.active`: Enable outgoing data segments counter
 
 #### `logic.compression`
 
 Reduces metric cardinality by compressing flow labels.
 
 **Label Folding**
-- `origin`: Folding strategy
+- `labelFolding`: Folding strategy
   - `"raw_endpoint"`: Full IP and port information
   - `"pid_condensed"`: Replace source IP/port with process ID
   
@@ -234,7 +236,7 @@ peering:
 
 **Port Range Filtering**
 ```yaml
-portranges:
+portRanges:
   - lower: 80    # Port 80
     upper: 443   # Up to port 443
   - lower: 8000  # Port 8000
@@ -263,7 +265,7 @@ logic:
     gauges:
       active: true
       rtt: { active: true }
-      delivery_rate: { active: true }
+      deliveryRate: { active: true }
     histograms:
       latency:
         active: true
@@ -289,8 +291,7 @@ logic:
         active: true
         bucket_bounds: [1, 5, 10, 50, 100, 500]
   compression:
-    label_folding:
-      origin: "pid_condensed"
+    labelFolding: "raw_endpoint"  # or "pid_condensed"
   selection:
     peering:
       networks: ["10.0.0.0/8", "192.168.0.0/16"]
@@ -314,12 +315,10 @@ IMAGE="ghcr.io/cherusk/prometheus_ss_exporter:${RELEASE_TAG}"
 
 # Run the container
 docker run --privileged --network host --pid host --rm \
-           -p 8090:8090 \
-           -e PORT=8090 \
-           -e CONFIG_FILE="${YOUR_CONFIG_FILE}" \
+           -p 8020:8020 \
            -v "${YOUR_CONFIG_FILE}:/config.yml:ro" \
            --name=prometheus_ss_exporter \
-           "${IMAGE}"
+           "${IMAGE}" --port=8020 --config=/config.yml
 ```
 
 #### Docker Compose
@@ -335,14 +334,12 @@ services:
     pid: host
     restart: unless-stopped
     ports:
-      - "8090:8090"
-    environment:
-      - PORT=8090
-      - CONFIG_FILE=/config.yml
+      - "8020:8020"
+    command: ["./prometheus_ss_exporter", "--port=8020", "--config=/config.yml"]
     volumes:
       - ./config.yml:/config.yml:ro
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8090/metrics"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8020/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -360,11 +357,10 @@ services:
 # More restricted capabilities (if your kernel supports it)
 docker run --cap-add=NET_RAW --cap-add=NET_ADMIN \
            --network host --pid host \
-           -p 8090:8090 \
-           -e PORT=8090 \
-           -e CONFIG_FILE="/config.yml" \
+           -p 8020:8020 \
            -v "./config.yml:/config.yml:ro" \
-           ghcr.io/cherusk/prometheus_ss_exporter:2.1.1
+           ghcr.io/cherusk/prometheus_ss_exporter:2.1.1 \
+           --port=8020 --config=/config.yml
 ```
 
 ### Kubernetes Deployment
@@ -393,14 +389,10 @@ spec:
         securityContext:
           privileged: true
         ports:
-        - containerPort: 8090
-          hostPort: 8090
+        - containerPort: 8020
+          hostPort: 8020
           protocol: TCP
-        env:
-        - name: PORT
-          value: "8090"
-        - name: CONFIG_FILE
-          value: "/config.yml"
+        command: ["./prometheus_ss_exporter", "--port=8020", "--config=/config.yml"]
         volumeMounts:
         - name: config
           mountPath: /config.yml
@@ -426,7 +418,7 @@ Add the following to your `prometheus.yml`:
 scrape_configs:
   - job_name: 'socket-stats'
     static_configs:
-      - targets: ['localhost:8090']
+      - targets: ['localhost:8020']
     scrape_interval: 15s
     metrics_path: /metrics
     # Optional: Relabel to add instance information
@@ -452,15 +444,15 @@ logic:
       active: true
       rtt: { active: true }
       cwnd: { active: true }
-      delivery_rate: { active: true }
+      deliveryRate: { active: true }
     histograms:
       latency:
         active: true
         bucket_bounds: [0.1, 0.5, 1, 5, 10, 50, 100, 200]
     counters:
       active: true
-      data_segs_in: { active: true }
-      data_segs_out: { active: true }
+      dataSegsIn: { active: true }
+      dataSegsOut: { active: true }
   selection:
     process:
       cmds: ["nginx", "apache2", "httpd"]
@@ -482,14 +474,13 @@ logic:
     gauges:
       active: true
       rtt: { active: true }
-      delivery_rate: { active: true }
+      deliveryRate: { active: true }
     histograms:
       latency:
         active: true
         bucket_bounds: [0.5, 1, 2, 5, 10, 25, 50, 100]
   compression:
-    label_folding:
-      origin: "pid_condensed"
+    labelFolding: "raw_endpoint"  # or "pid_condensed"
   selection:
     process:
       cmds: ["postgres", "mysqld", "mongod", "oracle"]
@@ -520,8 +511,7 @@ logic:
         active: true
         bucket_bounds: [0.01, 0.05, 0.1, 0.5, 1, 5, 10]
   compression:
-    label_folding:
-      origin: "pid_condensed"
+    labelFolding: "raw_endpoint"  # or "pid_condensed"
   selection:
     peering:
       networks: ["10.0.0.0/8", "192.168.0.0/16", "172.16.0.0/12"]
@@ -550,8 +540,7 @@ logic:
         active: true
         bucket_bounds: [1, 5, 10, 25, 50, 100, 250]
   compression:
-    label_folding:
-      origin: "pid_condensed"
+    labelFolding: "raw_endpoint"  # or "pid_condensed"
   selection:
     # Monitor only external traffic (skip internal networks)
     peering:
