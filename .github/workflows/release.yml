@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: 'Release tag (e.g., v1.2.3)'
+        description: 'Release tag (e.g., 1.2.3)'
         required: true
         type: string
 
@@ -41,10 +41,10 @@ jobs:
             exit 2
           fi
 
-          # Validate semantic versioning format (v1.2.3 or v1.2.3-beta)
-          if [[ ! "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9]+)?$ ]]; then
+          # Validate semantic versioning format (1.2.3 or 1.2.3-beta)
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9]+)?$ ]]; then
             echo "❌ Invalid version format: $VERSION"
-            echo "Expected format: v1.2.3 or v1.2.3-beta"
+            echo "Expected format: 1.2.3 or 1.2.3-beta"
             exit 1
           fi
 
