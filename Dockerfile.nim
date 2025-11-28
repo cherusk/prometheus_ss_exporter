@@ -27,11 +27,11 @@ RUN nimble install -y -d
 # Copy source code
 COPY src/ ./src/
 
-# Build the application
-RUN nimble build -d:release -d:metrics --gc:arc
+# Build the application using stable options like godon with verbose output
+RUN nimble build -v -d:release -d:metrics --threads:on
 
 # Final stage
-FROM debian:bookworm-slim
+FROM ubuntu:22.04
 
 # Install runtime dependencies
 RUN apt-get update && apt-get install -y \
@@ -52,7 +52,7 @@ RUN groupadd -g 1000 ss_exporter && \
 # Create app directory
 WORKDIR /app
 
-# Copy binary and Python modules
+# Copy binary
 COPY --from=builder /app/prometheus_ss_exporter ./prometheus_ss_exporter
 
 # Set ownership

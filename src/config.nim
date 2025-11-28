@@ -77,7 +77,7 @@ type
     portRanges*: seq[PortRange]
 
   CompressionConfig* = object
-    labelFolding*: string  # "raw_endpoint" or "pid_condensed"
+    labelFolding*: string # "raw_endpoint" or "pid_condensed"
 
   LogicConfig* = object
     metrics*: MetricsConfig
@@ -90,7 +90,8 @@ type
 proc getDefaultRttHistogramConfig(): RttHistogramConfig =
   RttHistogramConfig(
     active: false,
-    bucketBounds: @[0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 25.0, 50.0, 100.0, 250.0, 500.0, 1000.0]
+    bucketBounds: @[0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5,
+        5.0, 10.0, 25.0, 50.0, 100.0, 250.0, 500.0, 1000.0]
   )
 
 proc getDefaultHistogramConfig(): HistogramConfig =
@@ -142,22 +143,22 @@ proc loadConfig*(configPath: string): Option[ExporterConfig] =
   ## Load configuration from YAML file with proper default handling
   try:
     info "Loading configuration from: ", configPath
-    
+
     if not fileExists(configPath):
       error "Configuration file not found: ", configPath
       return none(ExporterConfig)
-    
+
     let content = readFile(configPath)
-    
+
     # Start with default configuration
     var config = getDefaultExporterConfig()
-    
+
     # Load YAML configuration - this will only override fields present in the file
     load(content, config)
-    
+
     info "Configuration loaded successfully"
     return some(config)
-    
+
   except CatchableError as e:
     error "Failed to load configuration: ", e.msg
     return none(ExporterConfig)
@@ -212,7 +213,7 @@ logic:
       - lower: 8000
         upper: 9000
 """
-  
+
   try:
     writeFile(configPath, sampleConfig)
     info "Sample configuration created at: ", configPath
