@@ -165,35 +165,23 @@ jobs:
           provenance: true
 
       - name: Scan final image for vulnerabilities
-        run: |
-          echo "🔍 Scanning final image for vulnerabilities..."
-          
-          # Scan the image and generate report
-          trivy image --format table "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.validate-release.outputs.version }}"
-          
-          # Generate JSON report for summary
-          trivy image --format json --output trivy-image-report.json \
-            "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.validate-release.outputs.version }}" 2>/dev/null || echo "Scan completed"
-
-          # Count vulnerabilities if report was generated
-          if [ -f trivy-image-report.json ]; then
-            CRITICAL=$(jq -r '.Results[]?.Vulnerabilities[]? | select(.Severity == "CRITICAL") | .VulnerabilityID' trivy-image-report.json 2>/dev/null | wc -l)
-            HIGH=$(jq -r '.Results[]?.Vulnerabilities[]? | select(.Severity == "HIGH") | .VulnerabilityID' trivy-image-report.json 2>/dev/null | wc -l)
-            
-            echo "📊 Security Scan Summary:" >> $GITHUB_STEP_SUMMARY
-            echo "- Critical vulnerabilities: $CRITICAL" >> $GITHUB_STEP_SUMMARY
-            echo "- High vulnerabilities: $HIGH" >> $GITHUB_STEP_SUMMARY
-            
-            # Upload vulnerability report as artifact
-            echo "trivy-image-report.json" > upload-files.list
-          fi
-
-      - name: Upload security scan artifacts
-        uses: actions/upload-artifact@v4
+        uses: aquasecurity/trivy-action@master
         with:
-          name: security-reports-${{ needs.validate-release.outputs.version }}
-          path: trivy-image-report.json
-          retention-days: 30
+          image-ref: "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.validate-release.outputs.version }}"
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+
+          - name: Upload Trivy scan results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-results.sarif'
+          category: "security-scan"
+
+      - name: Generate security summary
+        run: |
+          echo "📊 Security scan completed" >> $GITHUB_STEP_SUMMARY
+          echo "- Vulnerability scan: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.validate-release.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Security report uploaded to GitHub Security tab" >> $GITHUB_STEP_SUMMARY
 
   # Release confirmation and summary
   release-summary:
