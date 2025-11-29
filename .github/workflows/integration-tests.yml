@@ -24,7 +24,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: ./Dockerfile.nim
+          file: ./Dockerfile.nix
           push: false
           load: true
           tags: prometheus-ss-exporter:test
@@ -105,12 +105,58 @@ jobs:
 
       - name: Start service with all-metrics config
         run: |
+          # Verify config file exists before starting container
+          echo "Config file content:"
+          cat test_configs/all-metrics.yml
+
           docker run -d --name exporter-test \
             --privileged --network host --pid host \
             --user root \
             -v "$(pwd)/test_configs/all-metrics.yml:/config.yml:ro" \
             prometheus-ss-exporter:test \
             --port=8020 --config=/config.yml
+
+      - name: Debug pyroute2 ss2 command
+        run: |
+          echo "=== Testing pyroute2 ss2 command in same environment ==="
+          
+          # Start a debug container with same settings, overriding entrypoint
+          docker run --rm --name ss2-debug \
+            --privileged --network host --pid host \
+            --user root \
+            --entrypoint bash \
+            prometheus-ss-exporter:test \
+            -c "
+              echo '=== Python Debug Info ==='
+              python3 --version
+              
+              python3 -c '
+                import sys
+                print(\"Python version:\", sys.version)
+                
+                try:
+                  import pyroute2
+                  print(\"pyroute2 version:\", pyroute2.__version__)
+                  print(\"pyroute2 path:\", pyroute2.__file__)
+                except Exception as e:
+                  print(\"pyroute2 import error:\", e)
+                  
+                try:
+                  from pyroute2.netlink import diag
+                  print(\"pyroute2.netlink.diag: OK\")
+                except Exception as e:
+                  print(\"pyroute2.netlink.diag import error:\", e)
+              '
+            " || echo "Python debug container failed"
+          
+          echo ""
+          echo "=== Testing actual ss2 command ==="
+          docker run --rm --name ss2-debug \
+            --privileged --network host --pid host \
+            --user root \
+            --entrypoint bash \
+            prometheus-ss-exporter:test \
+            -c "python3 -m pyroute2.netlink.diag.ss2 --tcp --process 2>&1 | head -20" || echo "SS2 command failed"
 
       - name: Wait for service to start
         run: |
@@ -140,12 +186,15 @@ jobs:
             exit 1
           fi
 
+
       - name: Test all-metrics functionality
         run: |
           echo "Testing comprehensive all-metrics configuration..."
 
           # Get metrics
           METRICS=$(curl -s http://localhost:8020/metrics)
+
+          echo "${METRICS}"
 
           # Check that metrics endpoint is working
           if ! echo "$METRICS" | grep -q "collector_collection_runs_total"; then
