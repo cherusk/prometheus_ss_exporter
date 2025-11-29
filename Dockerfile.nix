@@ -49,6 +49,11 @@ RUN mkdir -p /app/bin && \
     echo "Binary copied successfully:" && \
     ls -la /app/bin/
 
+# Copy debug script for troubleshooting
+RUN cp debug_ss2.py /app/bin/debug_ss2.py && \
+    chmod +x /app/bin/debug_ss2.py && \
+    echo "Debug script copied successfully"
+
 WORKDIR /app
 
 # Expose port

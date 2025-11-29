@@ -105,12 +105,44 @@ jobs:
 
       - name: Start service with all-metrics config
         run: |
+          # Verify config file exists before starting container
+          echo "Config file content:"
+          cat test_configs/all-metrics.yml
+
           docker run -d --name exporter-test \
             --privileged --network host --pid host \
             --user root \
             -v "$(pwd)/test_configs/all-metrics.yml:/config.yml:ro" \
             prometheus-ss-exporter:test \
             --port=8020 --config=/config.yml
+
+      - name: Debug ss2 with built-in script
+        run: |
+          echo "=== Running debug script built into container ==="
+          
+          # The debug script needs Python, but it's not in PATH for docker exec
+          # Let's run it using the same Python that the application uses
+          echo "Finding Python path in container..."
+          
+          # Create a simple wrapper script that uses the same Python as the app
+          docker exec exporter-test /bin/sh -c '
+            echo "Creating Python wrapper..."
+            cat > /tmp/run_debug.sh << "EOF"
+#!/bin/sh
+# Find Python in Nix store and run debug script
+PYTHON_DIR=$(ls -d /nix/store/*python*/bin 2>/dev/null | head -1)
+if [ -n "$PYTHON_DIR" ]; then
+  PYTHON="$PYTHON_DIR/python3"
+  echo "Found Python at: $PYTHON"
+  exec "$PYTHON" /app/bin/debug_ss2.py
+else
+  echo "ERROR: Could not find Python in Nix store"
+  exit 1
+fi
+EOF
+            chmod +x /tmp/run_debug.sh
+            /tmp/run_debug.sh
+          ' || echo "Debug script failed"
 
       - name: Wait for service to start
         run: |
@@ -140,12 +172,15 @@ jobs:
             exit 1
           fi
 
+
       - name: Test all-metrics functionality
         run: |
           echo "Testing comprehensive all-metrics configuration..."
 
           # Get metrics
           METRICS=$(curl -s http://localhost:8020/metrics)
+
+          echo "${METRICS}"
 
           # Check that metrics endpoint is working
           if ! echo "$METRICS" | grep -q "collector_collection_runs_total"; then
