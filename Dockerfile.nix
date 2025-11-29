@@ -9,7 +9,7 @@ ARG VERSION
 RUN if [ -z "$VERSION" ]; then echo "ERROR: VERSION argument is required" && exit 1; fi
 
 # Set up Nix channels
-RUN nix-channel --add https://nixos.org/channels/nixpkgs-unstable nixpkgs && \
+RUN nix-channel --add https://nixos.org/channels/nixos-25.05 nixpkgs && \
     nix-channel --update
 
 # Copy source files first
