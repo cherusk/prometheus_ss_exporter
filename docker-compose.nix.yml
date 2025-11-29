@@ -1,9 +1,11 @@
 services:
-  prometheus-ss-exporter-nim:
+  prometheus-ss-exporter-nix:
     build:
       context: .
-      dockerfile: Dockerfile.nim
-    container_name: prometheus-ss-exporter-nim
+      dockerfile: Dockerfile.nix
+      args:
+        - VERSION=${VERSION}  # VERSION must be provided as environment variable
+    container_name: prometheus-ss-exporter-nix
     network_mode: host
     pid: host
     privileged: true
@@ -12,6 +14,7 @@ services:
       - PORT=8020
       - CONFIG_FILE=/config.yml
       - LOG_LEVEL=INFO
+      - VERSION=${VERSION}
     volumes:
       - ./example/config.yml:/config.yml:ro
     ports:
@@ -22,7 +25,8 @@ services:
       timeout: 10s
       retries: 3
       start_period: 10s
-    command: ["./prometheus_ss_exporter", "--port=8020", "--config=/config.yml"]
+    command: ["--port=8020", "--config=/config.yml"]
     labels:
-      - "prometheus.job=socket-stats-prometheus-nim"
-      - "version=nim-2.1.1"
+      - "prometheus.job=socket-stats-prometheus-nix"
+      - "version=${VERSION}"
+      - "base=nixos"

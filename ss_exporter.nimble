@@ -43,7 +43,7 @@ task test, "Run tests":
   exec "nim c -r tests/test_basic.nim"
 
 task docker, "Build Docker image":
-  exec "docker build -f Dockerfile.nim -t prometheus_ss_exporter:nim ."
+  exec "docker build -f Dockerfile.nix -t prometheus_ss_exporter:nix ."
 
 task build, "Build with version injection":
   exec "nimble build -v -d:release -d:metrics --threads:on -d:version=\"" & version & "\""
