@@ -140,7 +140,7 @@ proc getDefaultExporterConfig(): ExporterConfig =
   )
 
 proc loadConfig*(configPath: string): Option[ExporterConfig] =
-  ## Load configuration from YAML file with proper default handling
+  ## Load configuration from YAML file with graceful error handling
   try:
     info "Loading configuration from: ", configPath
 
@@ -153,8 +153,44 @@ proc loadConfig*(configPath: string): Option[ExporterConfig] =
     # Start with default configuration
     var config = getDefaultExporterConfig()
 
-    # Load YAML configuration - this will only override fields present in the file
-    load(content, config)
+    # Try to load YAML configuration
+    try:
+      load(content, config)
+    except CatchableError as yamlError:
+      # If YAML loading fails due to missing fields, try a more lenient approach
+      if "Missing field" in yamlError.msg and "rtt" in yamlError.msg:
+        info "Missing rtt field in histograms, applying graceful defaults"
+        
+        # Create a partial config structure that doesn't require all fields
+        type PartialHistogramConfig = object
+          active*: bool
+        
+        type PartialMetricsConfig = object
+          histograms*: PartialHistogramConfig
+          gauges*: GaugeConfig
+          counters*: CounterConfig
+        
+        type PartialLogicConfig = object
+          metrics*: PartialMetricsConfig
+          compression*: CompressionConfig
+          selection*: Option[SelectionConfig]
+        
+        type PartialExporterConfig = object
+          logic*: PartialLogicConfig
+        
+        var partialConfig = PartialExporterConfig()
+        load(content, partialConfig)
+        
+        # Transfer loaded values to full config, applying defaults for missing parts
+        config.logic.metrics.gauges = partialConfig.logic.metrics.gauges
+        config.logic.metrics.counters = partialConfig.logic.metrics.counters
+        config.logic.metrics.histograms.active = partialConfig.logic.metrics.histograms.active
+        # Keep default rtt configuration since it wasn't provided
+        config.logic.compression = partialConfig.logic.compression
+        config.logic.selection = partialConfig.logic.selection
+      else:
+        # Re-throw non-rtt related YAML errors
+        raise yamlError
 
     info "Configuration loaded successfully"
     return some(config)
@@ -174,9 +210,9 @@ logic:
   metrics:
     histograms:
       active: false  # Disabled by default
-      rtt:
-        active: false  # RTT histograms disabled by default
-        bucketBounds: [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 25.0, 50.0, 100.0, 250.0, 500.0, 1000.0]
+      # rtt:  # Uncomment to enable RTT histograms
+      #   active: false  # RTT histograms disabled by default
+      #   bucketBounds: [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 25.0, 50.0, 100.0, 250.0, 500.0, 1000.0]
     
     gauges:
       active: true  # Enabled by default
