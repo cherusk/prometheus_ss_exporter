@@ -1,66 +1,80 @@
 # Nix-based Dockerfile for Prometheus Socket Statistics Exporter
-# Single comprehensive file that builds everything with Nix
-# REQUIRES: VERSION argument must be provided
+# Optimized build using Nix package manager with caching
 
 FROM nixos/nix:2.19.2
 
-# VERSION argument is required - fail if not provided
-ARG VERSION
+# VERSION argument is required - provide default for development
+ARG VERSION=dev-build
 RUN if [ -z "$VERSION" ]; then echo "ERROR: VERSION argument is required" && exit 1; fi
 
-# Set up Nix channels
+# Set up Nix channels with latest stable package set
 RUN nix-channel --add https://nixos.org/channels/nixos-25.05 nixpkgs && \
     nix-channel --update
 
-# Copy source files first
+# Copy source files
 COPY . ./
 
-# Install required packages and build
-RUN nix-env -iA nixpkgs.nim nixpkgs.nimble nixpkgs.gcc nixpkgs.python3 nixpkgs.python3Packages.pyroute2 nixpkgs.bash nixpkgs.coreutils nixpkgs.wget nixpkgs.procps nixpkgs.shadow nixpkgs.cacert
+# Install development tools
+RUN nix-env -iA nixpkgs.nim nixpkgs.nimble nixpkgs.gcc
 
-# Create proper SSL certificate symlinks like NixOS
+# Install Python with packages using your NixOS pattern
+RUN echo 'let pkgs = import <nixpkgs> {}; in { python-env = pkgs.python312.withPackages (pythonPackages: with pkgs.python312Packages; [ pyroute2 psutil ]); }' > /tmp/python-env.nix && \
+    nix-env -if /tmp/python-env.nix -iA python-env && \
+    rm /tmp/python-env.nix
+
+# Setup SSL certificates for Python modules
 RUN mkdir -p /etc/ssl/certs && \
-    mkdir -p /etc/static/ssl/certs && \
-    CERT_PATH=$(find /nix/store -name "ca-bundle.crt" | head -1) && \
-    CERT_PATH_ALT=$(find /nix/store -name "ca-certificates.crt" | head -1) && \
-    cp "$CERT_PATH" /etc/static/ssl/certs/ca-bundle.crt && \
-    cp "$CERT_PATH_ALT" /etc/static/ssl/certs/ca-certificates.crt 2>/dev/null || cp "$CERT_PATH" /etc/static/ssl/certs/ca-certificates.crt && \
-    ln -sf /etc/static/ssl/certs/ca-bundle.crt /etc/ssl/certs/ca-bundle.crt && \
-    ln -sf /etc/static/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt && \
-    echo "Created SSL certificate symlinks matching NixOS"
+    CERT_BUNDLE=$(find /nix/store -name "ca-bundle.crt" | head -1) && \
+    if [ -n "$CERT_BUNDLE" ]; then \
+        ln -sf "$CERT_BUNDLE" /etc/ssl/certs/ca-bundle.crt && \
+        ln -sf "$CERT_BUNDLE" /etc/ssl/certs/ca-certificates.crt && \
+        echo "SSL certificates configured"; \
+    else \
+        echo "Warning: SSL certificates not found"; \
+    fi
 
-# Use nimble to install dependencies and build
+# Build the application with nimble
 RUN export HOME=$TMPDIR && \
     export BUILD_VERSION="$VERSION" && \
-    echo "Building version: $BUILD_VERSION" && \
-    echo "SSL certificates setup:" && \
-    ls -la /etc/ssl/certs/ && \
-    # Now nimble should work with proper SSL setup
-    nimble refresh && \
-    nimble search metrics && \
-    nimble install -y && \
-    nimble build -v -d:release -d:metrics --threads:on -d:version="$BUILD_VERSION" --verbose || \
+    echo "Building Prometheus Socket Statistics Exporter version: $BUILD_VERSION" && \
+    # Refresh package index and install dependencies
+    nimble refresh -y && \
+    # Install project dependencies
+    nimble install -y --depsOnly || \
+    # Fallback: install required packages manually if nimble fails
+    (nimble search metrics && nimble install -y metrics chronos yaml) && \
+    # Build the application
+    nimble build -v -d:release -d:metrics --threads:on -d:version="$BUILD_VERSION" || \
+    # Fallback compilation using nim compiler directly
     nim c -d:release -d:metrics --threads:on -d:version="$BUILD_VERSION" src/prometheus_ss_exporter.nim
 
-# Create app directory and install
-RUN mkdir -p /app/bin && \
-    cp src/prometheus_ss_exporter /app/bin/ && \
-    chmod +x /app/bin/prometheus_ss_exporter && \
-    echo "Binary copied successfully:" && \
-    ls -la /app/bin/
-
-# Copy debug script for troubleshooting
-RUN cp debug_ss2.py /app/bin/debug_ss2.py && \
-    chmod +x /app/bin/debug_ss2.py && \
-    echo "Debug script copied successfully"
+# Find and install the compiled binary
+RUN echo "Looking for compiled binary..." && \
+    find . -name "prometheus_ss_exporter" -type f 2>/dev/null || echo "Binary not found in current directory" && \
+    BIN_LOCATION=$(find . -name "prometheus_ss_exporter" -type f 2>/dev/null | head -1) && \
+    if [ -n "$BIN_LOCATION" ]; then \
+        echo "Found binary at: $BIN_LOCATION" && \
+        mkdir -p /app/bin && \
+        cp "$BIN_LOCATION" /app/bin/prometheus_ss_exporter && \
+        chmod +x /app/bin/prometheus_ss_exporter && \
+        echo "✅ Binary built and copied successfully" && \
+        ls -la /app/bin/; \
+    else \
+        echo "❌ Build failed - no binary found. Searching for any .nim files..." && \
+        find . -name "*.nim" | head -5 && \
+        echo "Checking for bin directory..." && \
+        ls -la bin/ 2>/dev/null || echo "No bin directory found"; \
+        exit 1; \
+    fi
 
 WORKDIR /app
 
 # Expose port
 EXPOSE 8020
 
-# Environment variables
-ENV PATH=/app/bin:/bin:/usr/bin
+# Environment variables for proper Nix environment
+ENV PATH="/nix/var/nix/profiles/default/bin:$PATH"
+ENV SSL_CERT_FILE="/etc/ssl/certs/ca-bundle.crt"
 
 # Run the application
 ENTRYPOINT ["./bin/prometheus_ss_exporter"]

@@ -27,7 +27,7 @@ SS2 Wrapper Module
 Calls the ss2 utility and parses its JSON output for socket statistics
 ]##
 
-import std/[osproc, json, strutils, logging, tables, strscans, options, marshal]
+import std/[osproc, json, strutils, tables, options, marshal]
 
 type
   TcpInfo* = object
@@ -109,46 +109,55 @@ proc parseFlowInfo*(node: JsonNode): FlowInfo =
   result.usrCtxt = parseUserContext(node)
 
 proc callSs2Utility*(): Option[SocketStats] =
-  ## Call the ss2 utility and parse its JSON output
+  ## Call the ss2 utility as a standalone CLI binary
   try:
-    # Call the ss2 utility from pyroute2 installation
-    let cmd = "python3"
-    let args = @["-m", "pyroute2.netlink.diag.ss2", "--tcp", "--process"]
+    # Call the standalone ss2 binary directly - no Python wrapper needed
+    let cmd = "ss2"
+    let args = @["--tcp", "--process"]
 
-    # Execute command
+    # Execute the ss2 binary directly
     let (output, exitCode) = osproc.execCmdEx(cmd & " " & args.join(" "))
 
-    # Command completed successfully
-
     if exitCode != 0:
-      # Command failed
+      echo "ss2 command failed with exit code: ", exitCode
+      echo "Error output: ", output
       return none(SocketStats)
 
-    # Parse JSON output - ss2 outputs an object with TCP data
+    # Parse JSON output - should be clean JSON from standalone binary
     let jsonNode = parseJson(output)
 
     var socketStats = SocketStats()
 
-    # ss2 outputs {"TCP": {"flows": [...]}} structure
-    if jsonNode.kind == JObject:
-      let tcpNode = jsonNode{"TCP"}
-      if not tcpNode.isNil and tcpNode.kind == JObject:
-        let flowsNode = tcpNode{"flows"}
-        if not flowsNode.isNil and flowsNode.kind == JArray:
-          # Found flows
-          for flowNode in flowsNode.items():
-            if not flowNode.isNil and flowNode.kind == JObject:
-              let flow = parseFlowInfo(flowNode)
-              socketStats.flows.add(flow)
+    # Handle both old and new ss2 output formats
+    var tcpNode: JsonNode = nil
+    
+    if jsonNode.kind == JArray:
+      # New format: [{"TCP": {"flows": [...]}}]
+      if jsonNode.len > 0:
+        tcpNode = jsonNode[0]{"TCP"}
+    elif jsonNode.kind == JObject:
+      # Old format: {"TCP": {"flows": [...]}}
+      tcpNode = jsonNode{"TCP"}
+    
+    if not tcpNode.isNil and tcpNode.kind == JObject:
+      let flowsNode = tcpNode{"flows"}
+      if not flowsNode.isNil and flowsNode.kind == JArray:
+        # Found flows
+        for flowNode in flowsNode.items():
+          if not flowNode.isNil and flowNode.kind == JObject:
+            let flow = parseFlowInfo(flowNode)
+            socketStats.flows.add(flow)
 
     # Successfully parsed flows
     return some(socketStats)
 
   except JsonParsingError as e:
     # JSON parsing error
+    echo "JSON parsing error: ", e.msg
     return none(SocketStats)
   except CatchableError as e:
     # Unexpected error
+    echo "Unexpected error in ss2 utility: ", e.msg
     return none(SocketStats)
 
 proc testSs2Wrapper*() =
