@@ -215,6 +215,8 @@ Reduces metric cardinality by compressing flow labels.
 # pid_condensed: flow="(20005)(DST#104.19.199.151|443)"
 ```
 
+**Note:** To enable `pid_condensed` folding, run the container with root privileges (`--user 0:0`) to access process information from the host `/proc` filesystem.
+
 #### `logic.selection`
 
 Filter which flows to monitor. All sections are optional.
@@ -317,6 +319,19 @@ IMAGE="ghcr.io/cherusk/prometheus_ss_exporter:${RELEASE_TAG}"
 docker run --privileged --network host --pid host --rm \
            -p 8020:8020 \
            -v "${YOUR_CONFIG_FILE}:/config.yml:ro" \
+           --name=prometheus_ss_exporter \
+           "${IMAGE}" --port=8020 --config=/config.yml
+```
+
+#### User Context (Process ID) Labels
+
+For `pid_condensed` label folding, run with root privileges to access process information:
+
+```bash
+docker run --privileged --network host --pid host --rm \
+           -p 8020:8020 \
+           -v "${YOUR_CONFIG_FILE}:/config.yml:ro" \
+           --user 0:0 \
            --name=prometheus_ss_exporter \
            "${IMAGE}" --port=8020 --config=/config.yml
 ```

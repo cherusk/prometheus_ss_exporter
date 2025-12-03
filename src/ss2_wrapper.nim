@@ -76,7 +76,8 @@ proc parseUserContext*(node: JsonNode): Table[string, Table[string, string]] =
   result = initTable[string, Table[string, string]]()
 
   let usrCtxtNode = node{"usr_ctxt"}
-  if usrCtxtNode.kind == JObject:
+  # Check if usr_ctxt field exists and is valid before accessing
+  if not usrCtxtNode.isNil and usrCtxtNode.kind == JObject:
     for user, pidData in usrCtxtNode.pairs():
       result[user] = initTable[string, string]()
       if pidData.kind == JObject:
@@ -125,7 +126,6 @@ proc callSs2Utility*(): Option[SocketStats] =
 
     # Parse JSON output - should be clean JSON from standalone binary
     let jsonNode = parseJson(output)
-
     var socketStats = SocketStats()
 
     # Handle both old and new ss2 output formats
@@ -158,6 +158,9 @@ proc callSs2Utility*(): Option[SocketStats] =
   except CatchableError as e:
     # Unexpected error
     echo "Unexpected error in ss2 utility: ", e.msg
+    return none(SocketStats)
+  except:
+    echo "Unknown exception caught"
     return none(SocketStats)
 
 proc testSs2Wrapper*() =
