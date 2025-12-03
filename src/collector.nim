@@ -300,12 +300,13 @@ proc preprocessMetricsWithConfig*(exporterConfig: config.ExporterConfig): seq[Me
 
     # Add RTT histogram if enabled in configuration
     if metricsConfig.histograms.active and
-        metricsConfig.histograms.rtt.active and rttValues.len > 0:
+        metricsConfig.histograms.rtt.isSome and
+        metricsConfig.histograms.rtt.get().active and rttValues.len > 0:
       # Sort values for histogram calculation
       rttValues = sorted(rttValues)
 
       # Use bucket bounds from configuration
-      let bucketBounds = metricsConfig.histograms.rtt.bucketBounds
+      let bucketBounds = metricsConfig.histograms.rtt.get().bucketBounds
 
       # Create histogram buckets
       for bound in bucketBounds:
