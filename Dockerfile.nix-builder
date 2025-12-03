@@ -1,0 +1,27 @@
+# Nix Builder Container - optimized for CI/CD
+# Used by build-container-nix.sh for isolated Nix builds
+
+FROM nixos/nix:2.19.2
+
+# Install dependencies efficiently
+RUN nix-channel --add https://nixos.org/channels/nixos-25.05 nixpkgs && \
+    nix-channel --update && \
+    nix-env -iA nixpkgs.docker-client nixpkgs.git nixpkgs.cacert
+
+# Set up SSL certificates for the builder
+RUN mkdir -p /etc/ssl/certs && \
+    CERT_BUNDLE=$(find /nix/store -name "ca-bundle.crt" | head -1) && \
+    ln -sf "$CERT_BUNDLE" /etc/ssl/certs/ca-bundle.crt && \
+    ln -sf "$CERT_BUNDLE" /etc/ssl/certs/ca-certificates.crt
+
+WORKDIR /build
+
+# Set build environment variables (will be set by build script)
+ENV VERSION=""
+ENV BUILD_CORES=""
+ENV CI_ENV=""
+ENV NIX_FILE="default.nix"
+ENV NO_CACHE=""
+
+# The build is performed when the container is run, not when it's built
+# This makes the builder reusable and efficient

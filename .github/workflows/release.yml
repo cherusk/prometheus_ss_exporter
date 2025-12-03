@@ -13,7 +13,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+  IMAGE_NAME: prometheus-ss-exporter
 
 jobs:
   # Pre-release validation step
@@ -81,6 +81,9 @@ jobs:
     runs-on: ubuntu-latest
     needs: [validate-release, security-validation]
     if: needs.validate-release.outputs.should-proceed == 'true'
+    env:
+      VERSION: ${{ needs.validate-release.outputs.version }}
+      IMAGE_NAME: prometheus-ss-exporter
     permissions:
       contents: read
       packages: write
@@ -102,6 +105,26 @@ jobs:
           driver-opts: |
             image=moby/buildkit:buildx-stable-1
           buildkitd-flags: --allow-insecure-entitlement security.insecure
+
+      - name: Set up Nix builder environment for release
+        run: |
+          echo "🏗️ Setting up Nix container build system for release..."
+          chmod +x ./build-container-nix.sh
+          
+          echo "Release build environment configured:"
+          echo "  Version: $VERSION"
+          echo "  Image: $IMAGE_NAME"
+
+      - name: Build optimized Nix container for release
+        run: |
+          echo "🚀 Building optimized Nix container for release..."
+          
+          # Build the optimized container using our enhanced script
+          bash ./build-container-nix.sh \
+            --version "$VERSION" \
+            --name "$IMAGE_NAME"
+          
+          echo "✅ Nix optimized build completed"
 
       - name: Log in to Container Registry
         uses: docker/login-action@v3
@@ -140,29 +163,27 @@ jobs:
             prometheus.exporter.type=socket_statistics
             prometheus.exporter.port=8020
 
-      - name: Build and push Docker image with security and caching
-        id: build
+      - name: Apply OCI metadata and push release image
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: ./Dockerfile.nix
-          platforms: linux/amd64  # Single platform as requested
+          file: ./Dockerfile.metadata
+          platforms: linux/amd64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-
+          
+          # Use our already-built Nix image as the base
+          # This creates a new layer that just adds the metadata/labels
+          build-args: |
+            BASE_IMAGE=${{ env.IMAGE_NAME }}:${{ env.VERSION }}
+          
           # Enhanced security and caching options
           cache-from: type=gha,scope=release-build
           cache-to: type=gha,mode=max,scope=release-build
-
-          # Build arguments for reproducibility
-          build-args: |
-            BUILD_DATE=${{ github.event.head_commit.timestamp }}
-            VCS_REF=${{ github.sha }}
-            VERSION=${{ needs.validate-release.outputs.version }}
-
+          
           # Security scanning
-          provenance: true
+          provenance true
 
       - name: Scan final image for vulnerabilities
         uses: aquasecurity/trivy-action@master
