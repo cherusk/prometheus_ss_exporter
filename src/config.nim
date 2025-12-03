@@ -36,7 +36,7 @@ type
 
   HistogramConfig* = object
     active*: bool
-    rtt*: RttHistogramConfig
+    rtt*: Option[RttHistogramConfig]
 
   RttHistogramConfig* = object
     active*: bool
@@ -87,6 +87,23 @@ type
   ExporterConfig* = object
     logic*: LogicConfig
 
+  # Helper types for simplified configuration loading
+  SimpleHistogramConfig* = object
+    active*: bool
+
+  SimpleMetricsConfig* = object
+    gauges*: GaugeConfig
+    counters*: CounterConfig
+    histograms*: SimpleHistogramConfig
+
+  SimpleLogicConfig* = object
+    metrics*: SimpleMetricsConfig
+    compression*: CompressionConfig
+    selection*: Option[SelectionConfig]
+
+  SimpleConfig* = object
+    logic*: SimpleLogicConfig
+
 proc getDefaultRttHistogramConfig(): RttHistogramConfig =
   RttHistogramConfig(
     active: false,
@@ -97,7 +114,7 @@ proc getDefaultRttHistogramConfig(): RttHistogramConfig =
 proc getDefaultHistogramConfig(): HistogramConfig =
   HistogramConfig(
     active: false,
-    rtt: getDefaultRttHistogramConfig()
+    rtt: none(RttHistogramConfig)  # Disabled histograms don't need rtt config
   )
 
 proc getDefaultGaugeConfig(): GaugeConfig =
@@ -140,7 +157,7 @@ proc getDefaultExporterConfig(): ExporterConfig =
   )
 
 proc loadConfig*(configPath: string): Option[ExporterConfig] =
-  ## Load configuration from YAML file with proper default handling
+  ## Load configuration from YAML file with graceful error handling
   try:
     info "Loading configuration from: ", configPath
 
@@ -153,8 +170,37 @@ proc loadConfig*(configPath: string): Option[ExporterConfig] =
     # Start with default configuration
     var config = getDefaultExporterConfig()
 
-    # Load YAML configuration - this will only override fields present in the file
-    load(content, config)
+    # Try to load YAML configuration
+    try:
+      load(content, config)
+    except CatchableError as yamlError:
+      # If YAML loading fails due to missing rtt field when histograms are disabled, handle gracefully
+      if "Missing field" in yamlError.msg and "rtt" in yamlError.msg:
+        info "RTT field missing but histograms may be disabled - trying simplified loading"
+        
+        # Check if user explicitly disabled histograms with string check (fallback approach)
+        if "histograms:" in content and "active: false" in content:
+          info "User appears to have disabled histograms, using simplified configuration"
+          
+          # Load using predefined simple config types
+          var simpleConfig: SimpleConfig
+          load(content, simpleConfig)
+          
+          # Transfer to full config
+          config.logic.metrics.gauges = simpleConfig.logic.metrics.gauges
+          config.logic.metrics.counters = simpleConfig.logic.metrics.counters
+          config.logic.metrics.histograms.active = simpleConfig.logic.metrics.histograms.active
+          config.logic.compression = simpleConfig.logic.compression
+          config.logic.selection = simpleConfig.logic.selection
+          
+          info "Configuration loaded successfully with disabled histograms"
+          return some(config)
+        else:
+          # Re-raise the original error if we can't handle it gracefully
+          raise yamlError
+      else:
+        # Re-throw non-rtt related YAML errors
+        raise yamlError
 
     info "Configuration loaded successfully"
     return some(config)
@@ -173,10 +219,12 @@ proc createSampleConfig*(configPath: string) =
 logic:
   metrics:
     histograms:
-      active: false  # Disabled by default
-      rtt:
-        active: false  # RTT histograms disabled by default
-        bucketBounds: [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 25.0, 50.0, 100.0, 250.0, 500.0, 1000.0]
+      active: false  # Disabled by default - no rtt section needed when disabled
+      # To enable RTT histograms, uncomment the following:
+      # active: true
+      # rtt:
+      #   active: true
+      #   bucketBounds: [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 25.0, 50.0, 100.0, 250.0, 500.0, 1000.0]
     
     gauges:
       active: true  # Enabled by default

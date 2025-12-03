@@ -39,22 +39,6 @@ type
     config*: config.ExporterConfig
     selector*: FlowSelector
 
-proc createFlowLabel*(flow: ss2_wrapper.FlowInfo, folding: string): string =
-  ## Create flow label based on folding configuration
-  case folding
-  of "raw_endpoint":
-    result = "(SRC#{$1}|{$2})(DST#{$3}|{$4})" % [
-      flow.src, $flow.srcPort, flow.dst, $flow.dstPort
-    ]
-  else:
-    result = "flow_" & $flow.srcPort & "_" & $flow.dstPort
-
-proc shouldIncludeFlow*(selector: FlowSelector,
-    flow: ss2_wrapper.FlowInfo): bool =
-  ## Apply selection filters to determine if flow should be included
-  # For now, accept all flows
-  result = true
-
 when defined(metrics):
   var socketCollector: SocketCollector
   var collectorConfig*: config.ExporterConfig
@@ -105,9 +89,67 @@ proc createFlowLabel*(src: string, srcPort: int, dst: string, dstPort: int,
   else:
     result = "flow_" & $srcPort & "_" & $dstPort
 
-proc shouldIncludeFlow*(selector: FlowSelector, flow: JsonNode): bool =
+proc shouldIncludeFlow*(selector: FlowSelector, flow: ss2_wrapper.FlowInfo): bool =
   ## Apply selection filters to determine if flow should be included
-  # For now, accept all flows - TODO: implement filtering logic
+  let selectionConfig = selector.config.logic.selection
+  if isNone(selectionConfig):
+    return true  # No selection config, accept all flows
+  let selection = get(selectionConfig)
+  
+  # Process filtering
+  if isSome(selection.process):
+    let processConfig = get(selection.process)
+    if processConfig.pids.len > 0:
+      # Check if flow's process is in the allowed PIDs
+      var foundPid = false
+      for user, pidData in flow.usrCtxt.pairs():
+        for pid, cmd in pidData.pairs():
+          try:
+            let flowPid = parseInt(pid)
+            if flowPid in processConfig.pids:
+              foundPid = true
+              break
+          except:
+            discard
+        if foundPid: break
+      if not foundPid: return false
+    
+    if processConfig.cmds.len > 0:
+      # Check if flow's command is in the allowed commands
+      var foundCmd = false
+      for user, pidData in flow.usrCtxt.pairs():
+        for pid, cmd in pidData.pairs():
+          if cmd in processConfig.cmds:
+            foundCmd = true
+            break
+        if foundCmd: break
+      if not foundCmd: return false
+  
+  # Network/peer filtering
+  if isSome(selection.peering):
+    let peeringConfig = get(selection.peering)
+    if peeringConfig.addresses.len > 0:
+      if flow.dst notin peeringConfig.addresses:
+        return false
+    
+    if peeringConfig.networks.len > 0:
+      # Simple network matching (basic implementation)
+      var foundNetwork = false
+      for network in peeringConfig.networks:
+        if flow.dst.startswith(network.split('/')[0]):
+          foundNetwork = true
+          break
+      if not foundNetwork: return false
+  
+  # Port range filtering
+  if selection.portRanges.len > 0:
+    var foundPort = false
+    for portRange in selection.portRanges:
+      if flow.dstPort >= portRange.lower and flow.dstPort <= portRange.upper:
+        foundPort = true
+        break
+    if not foundPort: return false
+  
   result = true
 
 proc preprocessMetricsWithConfig*(exporterConfig: config.ExporterConfig): seq[MetricOutput] =
@@ -133,13 +175,10 @@ proc preprocessMetricsWithConfig*(exporterConfig: config.ExporterConfig): seq[Me
   # Initialize flow selector (TODO: implement actual filtering logic)
   let selector = FlowSelector(config: exporterConfig)
 
-  # Simple JSON parsing without using the problematic ss2_wrapper
+  # Use the ss2_wrapper to get socket statistics
   try:
-    let cmd = "python3"
-    let args = @["-m", "pyroute2.netlink.diag.ss2", "--tcp", "--process"]
-    let (output, exitCode) = osproc.execCmdEx(cmd & " " & args.join(" "))
-
-    if exitCode != 0:
+    let socketStats = ss2_wrapper.callSs2Utility()
+    if socketStats.isNone:
       result.add(MetricOutput(
         name: "collector_data_status",
         labels: @["status"],
@@ -156,22 +195,14 @@ proc preprocessMetricsWithConfig*(exporterConfig: config.ExporterConfig): seq[Me
       ))
       return result
 
-    let jsonNode = parseJson(output)
-
+    let stats = socketStats.get()
     var flowCount = 0
-    var flows: seq[JsonNode] = @[]
     var rttValues: seq[float] = @[] # For histogram generation
 
-    if jsonNode.kind == JObject:
-      let tcpNode = jsonNode{"TCP"}
-      if not tcpNode.isNil and tcpNode.kind == JObject:
-        let flowsNode = tcpNode{"flows"}
-        if not flowsNode.isNil and flowsNode.kind == JArray:
-          flowCount = flowsNode.len
-          # Collect flows for detailed analysis
-          for flowNode in flowsNode.items():
-            if not flowNode.isNil and flowNode.kind == JObject:
-              flows.add(flowNode)
+    # Filter flows using the selector and count them
+    for flow in stats.flows:
+      if selector.shouldIncludeFlow(flow):
+        flowCount += 1
 
     # Add flow count
     result.add(MetricOutput(
@@ -182,105 +213,100 @@ proc preprocessMetricsWithConfig*(exporterConfig: config.ExporterConfig): seq[Me
       timestamp: timestamp
     ))
 
-    # Process all flows respecting configuration
-    for flowNode in flows:
+    # Process all flows respecting configuration  
+    for flow in stats.flows:
+      # Only process flows that pass the filter
+      if not selector.shouldIncludeFlow(flow):
+        continue
 
-      let src = flowNode{"src"}.getStr("unknown")
-      let dst = flowNode{"dst"}.getStr("unknown")
-      let srcPort = safeGetInt(flowNode, "src_port")
-      let dstPort = safeGetInt(flowNode, "dst_port")
+      let src = flow.src
+      let dst = flow.dst
+      let srcPort = flow.srcPort
+      let dstPort = flow.dstPort
 
       # Extract process ID for pid_condensed label folding
       var processId = ""
       if compressionConfig.labelFolding == "pid_condensed":
-        # Try usrCtxt (user context) - this is where process info is stored
-        let usrCtxtNode = flowNode{"usr_ctxt"}
-        if not usrCtxtNode.isNil and usrCtxtNode.kind == JObject:
-          for user, pidData in usrCtxtNode.pairs():
-            if pidData.kind == JObject:
-              for pid, cmdData in pidData.pairs():
-                processId = pid
-                break
-              if processId.len > 0:
-                break
-        
-        # If no usrCtxt, try proc_info as fallback
-        if processId.len == 0:
-          let procInfo = flowNode{"proc_info"}
-          if not procInfo.isNil and procInfo.kind == JObject:
-            processId = procInfo{"pid"}.getStr("")
+        # Extract process info from the structured usrCtxt
+        for user, pidData in flow.usrCtxt.pairs():
+          for pid, cmd in pidData.pairs():
+            processId = pid
+            break
+          if processId.len > 0:
+            break
 
       # Create flow label based on configuration
       let flowLabel = createFlowLabel(src, srcPort, dst, dstPort,
           compressionConfig.labelFolding, processId)
 
-      # Extract TCP info safely
-      let tcpInfo = flowNode{"tcp_info"}
-      if not tcpInfo.isNil and tcpInfo.kind == JObject:
-        # Round Trip Time - GAUGE
-        let rtt = safeGetFloat(tcpInfo, "rtt")
+      # Extract TCP info from structured FlowInfo
+      let tcpInfo = flow.tcpInfo
+      
+      # Round Trip Time - GAUGE
+      let rtt = tcpInfo.rtt
 
+      result.add(MetricOutput(
+        name: "tcp_rtt",
+        labels: @["flow"],
+        labelValues: @[flowLabel],
+        value: rtt,
+        timestamp: timestamp
+      ))
+
+      # Add RTT value to histogram collection
+      rttValues.add(rtt)
+
+      # Congestion Window - GAUGE
+      let sndCwnd = tcpInfo.sndCwnd
+
+      result.add(MetricOutput(
+        name: "tcp_cwnd",
+        labels: @["flow"],
+        labelValues: @[flowLabel],
+        value: sndCwnd.float,
+        timestamp: timestamp
+      ))
+
+      # Delivery Rate - GAUGE
+      let deliveryRate = tcpInfo.deliveryRate
+      if deliveryRate > 0:
         result.add(MetricOutput(
-          name: "tcp_rtt",
+          name: "tcp_delivery_rate",
           labels: @["flow"],
           labelValues: @[flowLabel],
-          value: rtt,
+          value: deliveryRate.float,
           timestamp: timestamp
         ))
 
-        # Add RTT value to histogram collection
-        rttValues.add(rtt)
+      # Data Segments - COUNTERS
+      let dataSegsIn = tcpInfo.dataSegsIn
+      let dataSegsOut = tcpInfo.dataSegsOut
 
-        # Congestion Window - GAUGE
-        let sndCwnd = safeGetInt(tcpInfo, "snd_cwnd")
+      result.add(MetricOutput(
+        name: "tcp_data_segs_in",
+        labels: @["flow"],
+        labelValues: @[flowLabel],
+        value: dataSegsIn.float,
+        timestamp: timestamp
+      ))
 
-        result.add(MetricOutput(
-          name: "tcp_cwnd",
-          labels: @["flow"],
-          labelValues: @[flowLabel],
-          value: sndCwnd.float,
-          timestamp: timestamp
-        ))
-
-        # Delivery Rate - GAUGE
-        let deliveryRate = safeGetInt(tcpInfo, "delivery_rate")
-        if deliveryRate > 0:
-          result.add(MetricOutput(
-            name: "tcp_delivery_rate",
-            labels: @["flow"],
-            labelValues: @[flowLabel],
-            value: deliveryRate.float,
-            timestamp: timestamp
-          ))
-
-        # Data Segments - COUNTERS
-        let dataSegsIn = safeGetInt(tcpInfo, "data_segs_in")
-        let dataSegsOut = safeGetInt(tcpInfo, "data_segs_out")
-
-        result.add(MetricOutput(
-          name: "tcp_data_segs_in",
-          labels: @["flow"],
-          labelValues: @[flowLabel],
-          value: dataSegsIn.float,
-          timestamp: timestamp
-        ))
-
-        result.add(MetricOutput(
-          name: "tcp_data_segs_out",
-          labels: @["flow"],
-          labelValues: @[flowLabel],
-          value: dataSegsOut.float,
-          timestamp: timestamp
-        ))
+      result.add(MetricOutput(
+        name: "tcp_data_segs_out",
+        labels: @["flow"],
+        labelValues: @[flowLabel],
+        value: dataSegsOut.float,
+        timestamp: timestamp
+      ))
 
     # Add RTT histogram if enabled in configuration
     if metricsConfig.histograms.active and
-        metricsConfig.histograms.rtt.active and rttValues.len > 0:
+        metricsConfig.histograms.rtt.isSome and
+        metricsConfig.histograms.rtt.get().active and rttValues.len > 0:
       # Sort values for histogram calculation
       rttValues = sorted(rttValues)
 
       # Use bucket bounds from configuration
-      let bucketBounds = metricsConfig.histograms.rtt.bucketBounds
+      let bucketBounds = metricsConfig.histograms.rtt.get().bucketBounds
 
       # Create histogram buckets
       for bound in bucketBounds:
@@ -329,7 +355,7 @@ proc preprocessMetricsWithConfig*(exporterConfig: config.ExporterConfig): seq[Me
       name: "collector_data_status",
       labels: @["status"],
       labelValues: @["success"],
-      value: flows.len.float,
+      value: flowCount.float,
       timestamp: timestamp
     ))
 
