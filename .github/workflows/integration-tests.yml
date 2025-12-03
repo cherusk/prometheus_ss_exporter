@@ -374,6 +374,19 @@ jobs:
           
           echo "✅ Flow filtering tests completed"
 
+      - name: Test service health
+        run: |
+          echo "Testing service health endpoints..."
+
+          # Test health endpoint - container should still be running from previous test
+          HEALTH=$(curl -s http://localhost:8020/health || echo "failed")
+          if [ "$HEALTH" != "OK" ]; then
+            echo "❌ Health endpoint not responding correctly"
+            exit 1
+          fi
+
+          echo "✅ Health endpoint working"
+
       - name: Test error handling and edge cases
         run: |
           echo "Testing error handling and edge cases..."
@@ -440,19 +453,6 @@ jobs:
           fi
           
           echo "✅ Error handling tests completed"
-
-      - name: Test service health
-        run: |
-          echo "Testing service health endpoints..."
-
-          # Test health endpoint
-          HEALTH=$(curl -s http://localhost:8020/health || echo "failed")
-          if [ "$HEALTH" != "OK" ]; then
-            echo "❌ Health endpoint not responding correctly"
-            exit 1
-          fi
-
-          echo "✅ Health endpoint working"
 
       - name: Stop service
         run: docker stop exporter-test || true
