@@ -342,6 +342,7 @@ execute_build() {
                 --option sandbox false \
                 --cores \$BUILD_CORES \
                 --argstr version \"\$VERSION\" \
+                --argstr imageName \"\$IMAGE_NAME\" \
                 ${NO_CACHE:+--no-build-output} && \
             cp result /output/$OUTPUT_FILE
         " || {

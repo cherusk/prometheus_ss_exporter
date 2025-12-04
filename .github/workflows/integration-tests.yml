@@ -17,7 +17,7 @@ on:
   workflow_dispatch:
 
 env:
-  IMAGE_NAME: prometheus-ss-exporter
+  IMAGE_NAME: prometheus_ss_exporter
 
 jobs:
   integration-tests:
