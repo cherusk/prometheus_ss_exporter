@@ -1,0 +1,31 @@
+---
+# Minimal Prometheus Socket Statistics Exporter Configuration
+# All metrics disabled - only basic flow counting enabled
+# Useful for testing or when you only want basic flow information
+
+logic:
+  metrics:
+    gauges:
+      active: false
+      rtt: { active: false }
+      cwnd: { active: false }
+      deliveryRate: { active: false }
+    histograms:
+      active: false
+      rtt: { active: false, bucketBounds: [] }
+    counters:
+      active: false
+      dataSegsIn: { active: false }
+      dataSegsOut: { active: false }
+  compression:
+    labelFolding: "raw_endpoint"
+  selection:
+    # No filtering - collect all flows (though metrics are disabled above)
+    process:
+      pids: []
+      cmds: []
+    peering:
+      addresses: []
+      networks: []
+      hosts: []
+    portRanges: []

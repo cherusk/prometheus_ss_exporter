@@ -137,6 +137,12 @@ tcp_rtt_hist_ms_sum 24.0
 
 The exporter is configured via a YAML file that controls metric collection, flow filtering, and label compression. Use the `--config` command line argument to specify the configuration file path.
 
+**Example Configuration Files**:
+- `example/config.yml` - Full-featured configuration with all metrics
+- `example/config_minimal_disabled.yml` - All metrics disabled (minimal output)
+- `example/config_partial.yml` - Selective metrics enabled
+- `example/config_minimal.yml` - Basic configuration with essential metrics
+
 ### Configuration Structure
 
 ```yaml
@@ -259,6 +265,38 @@ logic:
       active: true
 ```
 
+**All Metrics Disabled (Minimal Output)**
+```yaml
+---
+logic:
+  metrics:
+    gauges:
+      active: false
+      rtt: { active: false }
+      cwnd: { active: false }
+      deliveryRate: { active: false }
+    histograms:
+      active: false
+      rtt: { active: false, bucketBounds: [] }
+    counters:
+      active: false
+      dataSegsIn: { active: false }
+      dataSegsOut: { active: false }
+  compression:
+    labelFolding: "raw_endpoint"
+  selection:
+    process:
+      pids: []
+      cmds: []
+    peering:
+      addresses: []
+      networks: []
+      hosts: []
+    portRanges: []
+```
+
+**⚠️ Important Configuration Note**: Even when metrics are disabled (`active: false`), individual metric fields (like `rtt`, `cwnd`, etc.) must be present in the configuration file with their own `active: false` setting. This is required for proper YAML parsing.
+
 **Web Server Monitoring**
 ```yaml
 ---
@@ -278,6 +316,28 @@ logic:
     portranges:
       - lower: 80
         upper: 443
+```
+
+**Selective Metrics (Partial Configuration)**
+```yaml
+---
+logic:
+  metrics:
+    gauges:
+      active: true
+      rtt: { active: true }           # Enable only RTT gauge
+      cwnd: { active: false }        # Disable other gauges
+      deliveryRate: { active: false }
+    histograms:
+      active: true
+      rtt: { 
+        active: true, 
+        bucketBounds: [0.1, 0.5, 1, 5, 10, 50, 100, 200] 
+      }
+    counters:
+      active: false                   # Disable all counters
+      dataSegsIn: { active: false }
+      dataSegsOut: { active: false }
 ```
 
 **High-Cardinality Environment**

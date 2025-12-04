@@ -1,0 +1,30 @@
+---
+# Partial Configuration Example
+# Only enable specific metrics you need
+
+logic:
+  metrics:
+    gauges:
+      active: true
+      rtt: { active: true }           # Enable RTT gauge
+      cwnd: { active: false }        # Disable congestion window
+      deliveryRate: { active: false } # Disable delivery rate
+    histograms:
+      active: true
+      rtt: { 
+        active: true, 
+        bucketBounds: [0.1, 0.5, 1, 5, 10, 50, 100, 200] 
+      }
+    counters:
+      active: false                   # Disable all counters
+      dataSegsIn: { active: false }
+      dataSegsOut: { active: false }
+  compression:
+    labelFolding: "raw_endpoint"
+  selection:
+    # Only monitor web traffic
+    process:
+      cmds: ["nginx", "apache2", "httpd"]
+    portRanges:
+      - lower: 80
+        upper: 443
