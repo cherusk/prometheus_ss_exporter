@@ -176,7 +176,7 @@ jobs:
           # Use our already-built Nix image as the base
           # This creates a new layer that just adds the metadata/labels
           build-args: |
-            BASE_IMAGE=${{ env.IMAGE_NAME }}:${{ env.VERSION }}
+            BASE_IMAGE=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.VERSION }}
           
           # Enhanced security and caching options
           cache-from: type=gha,scope=release-build
