@@ -69,7 +69,7 @@ jobs:
     if: needs.validate-release.outputs.should-proceed == 'true'
     env:
       VERSION: ${{ needs.validate-release.outputs.version }}
-      IMAGE_NAME: prometheus-ss-exporter
+      IMAGE_NAME: prometheus_ss_exporter
     permissions:
       contents: read
       packages: write
