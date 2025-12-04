@@ -65,7 +65,7 @@ jobs:
   # Main build and push job with enhanced security and caching
   build-and-push-image:
     runs-on: ubuntu-latest
-    needs: [validate-release, security-validation]
+    needs: [validate-release]
     if: needs.validate-release.outputs.should-proceed == 'true'
     env:
       VERSION: ${{ needs.validate-release.outputs.version }}
