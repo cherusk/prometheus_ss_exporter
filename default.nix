@@ -89,7 +89,7 @@ let
 
   # Create container image using buildLayeredImage for better pseudo filesystem support
   containerImage = pkgs.dockerTools.buildLayeredImage {
-    name = "prometheus-ss-exporter";
+    name = "${imageName}";
     tag = "${version}";
     
     # Use busybox for minimal base utilities and pseudo filesystem support
