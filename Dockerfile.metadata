@@ -1,0 +1,4 @@
+# Metadata wrapper for Nix-built prometheus-ss-exporter
+# This Dockerfile adds OCI-compliant labels to our optimized Nix-built image
+ARG BASE_IMAGE
+FROM ${BASE_IMAGE}

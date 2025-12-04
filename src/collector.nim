@@ -76,18 +76,29 @@ proc safeGetInt(node: JsonNode, key: string, default: int = 0): int =
 proc createFlowLabel*(src: string, srcPort: int, dst: string, dstPort: int,
     folding: string, processId: string = ""): string =
   ## Create flow label based on folding configuration
+  echo "DEBUG: createFlowLabel called with src=", src, " srcPort=", srcPort, " dst=", dst, " dstPort=", dstPort, " folding=", folding
   case folding
   of "raw_endpoint":
+    echo "DEBUG: using raw_endpoint folding"
     result = "(SRC#" & src & "|" & $srcPort & ")(DST#" & dst & "|" & $dstPort & ")"
+    echo "DEBUG: raw_endpoint result: ", result
   of "pid_condensed":
+    echo "DEBUG: using pid_condensed folding, processId='", processId, "'"
     if processId.len > 0:
+      echo "DEBUG: processId found, using pid format"
       result = "(" & processId & ")(DST#" & dst & "|" & $dstPort & ")"
+      echo "DEBUG: pid result: ", result
     else:
+      echo "DEBUG: no processId, using fallback"
       # Fallback to raw_endpoint if no process ID available
       result = "(SRC#" & src & "|" & $srcPort & ")(DST#" & dst & "|" &
           $dstPort & ")"
+      echo "DEBUG: fallback result: ", result
   else:
+    echo "DEBUG: using fallback flow format"
     result = "flow_" & $srcPort & "_" & $dstPort
+    echo "DEBUG: fallback result: ", result
+  echo "DEBUG: createFlowLabel returning"
 
 proc shouldIncludeFlow*(selector: FlowSelector, flow: ss2_wrapper.FlowInfo): bool =
   ## Apply selection filters to determine if flow should be included
@@ -177,8 +188,11 @@ proc preprocessMetricsWithConfig*(exporterConfig: config.ExporterConfig): seq[Me
 
   # Use the ss2_wrapper to get socket statistics
   try:
+    echo "DEBUG: calling ss2_wrapper.callSs2Utility()"
     let socketStats = ss2_wrapper.callSs2Utility()
+    echo "DEBUG: ss2_wrapper.callSs2Utility() returned"
     if socketStats.isNone:
+      echo "DEBUG: socketStats.isNone is true, returning error status"
       result.add(MetricOutput(
         name: "collector_data_status",
         labels: @["status"],
@@ -195,14 +209,18 @@ proc preprocessMetricsWithConfig*(exporterConfig: config.ExporterConfig): seq[Me
       ))
       return result
 
+    echo "DEBUG: extracting stats from socketStats"
     let stats = socketStats.get()
+    echo "DEBUG: extracted stats, flows count: ", stats.flows.len
     var flowCount = 0
     var rttValues: seq[float] = @[] # For histogram generation
 
     # Filter flows using the selector and count them
+    echo "DEBUG: filtering flows, total flows: ", stats.flows.len
     for flow in stats.flows:
       if selector.shouldIncludeFlow(flow):
         flowCount += 1
+    echo "DEBUG: filtered flow count: ", flowCount
 
     # Add flow count
     result.add(MetricOutput(
@@ -214,15 +232,19 @@ proc preprocessMetricsWithConfig*(exporterConfig: config.ExporterConfig): seq[Me
     ))
 
     # Process all flows respecting configuration  
+    echo "DEBUG: processing flows for metrics"
+    var processedFlows = 0
     for flow in stats.flows:
       # Only process flows that pass the filter
       if not selector.shouldIncludeFlow(flow):
         continue
 
+      echo "DEBUG: processing flow ", processedFlows
       let src = flow.src
       let dst = flow.dst
       let srcPort = flow.srcPort
       let dstPort = flow.dstPort
+      echo "DEBUG: flow src/dst ports: ", srcPort, "/", dstPort
 
       # Extract process ID for pid_condensed label folding
       var processId = ""
@@ -236,22 +258,28 @@ proc preprocessMetricsWithConfig*(exporterConfig: config.ExporterConfig): seq[Me
             break
 
       # Create flow label based on configuration
+      echo "DEBUG: calling createFlowLabel for flow ", processedFlows
       let flowLabel = createFlowLabel(src, srcPort, dst, dstPort,
           compressionConfig.labelFolding, processId)
+      echo "DEBUG: createFlowLabel returned: ", flowLabel
 
       # Extract TCP info from structured FlowInfo
+      echo "DEBUG: extracting tcpInfo"
       let tcpInfo = flow.tcpInfo
+      echo "DEBUG: tcpInfo extracted, rtt: ", tcpInfo.rtt
       
       # Round Trip Time - GAUGE
       let rtt = tcpInfo.rtt
 
-      result.add(MetricOutput(
-        name: "tcp_rtt",
-        labels: @["flow"],
-        labelValues: @[flowLabel],
-        value: rtt,
-        timestamp: timestamp
-      ))
+      # Only add RTT metric if enabled in configuration
+      if metricsConfig.gauges.active and metricsConfig.gauges.rtt.active:
+        result.add(MetricOutput(
+          name: "tcp_rtt",
+          labels: @["flow"],
+          labelValues: @[flowLabel],
+          value: rtt,
+          timestamp: timestamp
+        ))
 
       # Add RTT value to histogram collection
       rttValues.add(rtt)
@@ -259,17 +287,20 @@ proc preprocessMetricsWithConfig*(exporterConfig: config.ExporterConfig): seq[Me
       # Congestion Window - GAUGE
       let sndCwnd = tcpInfo.sndCwnd
 
-      result.add(MetricOutput(
-        name: "tcp_cwnd",
-        labels: @["flow"],
-        labelValues: @[flowLabel],
-        value: sndCwnd.float,
-        timestamp: timestamp
-      ))
+      # Only add congestion window metric if enabled in configuration
+      if metricsConfig.gauges.active and metricsConfig.gauges.cwnd.active:
+        result.add(MetricOutput(
+          name: "tcp_cwnd",
+          labels: @["flow"],
+          labelValues: @[flowLabel],
+          value: sndCwnd.float,
+          timestamp: timestamp
+        ))
 
       # Delivery Rate - GAUGE
       let deliveryRate = tcpInfo.deliveryRate
-      if deliveryRate > 0:
+      if deliveryRate > 0 and
+         metricsConfig.gauges.active and metricsConfig.gauges.deliveryRate.active:
         result.add(MetricOutput(
           name: "tcp_delivery_rate",
           labels: @["flow"],
@@ -282,21 +313,27 @@ proc preprocessMetricsWithConfig*(exporterConfig: config.ExporterConfig): seq[Me
       let dataSegsIn = tcpInfo.dataSegsIn
       let dataSegsOut = tcpInfo.dataSegsOut
 
-      result.add(MetricOutput(
-        name: "tcp_data_segs_in",
-        labels: @["flow"],
-        labelValues: @[flowLabel],
-        value: dataSegsIn.float,
-        timestamp: timestamp
-      ))
+      # Only add data segments in metric if enabled in configuration
+      if metricsConfig.counters.active and metricsConfig.counters.dataSegsIn.active:
+        result.add(MetricOutput(
+          name: "tcp_data_segs_in",
+          labels: @["flow"],
+          labelValues: @[flowLabel],
+          value: dataSegsIn.float,
+          timestamp: timestamp
+        ))
 
-      result.add(MetricOutput(
-        name: "tcp_data_segs_out",
-        labels: @["flow"],
-        labelValues: @[flowLabel],
-        value: dataSegsOut.float,
-        timestamp: timestamp
-      ))
+      # Only add data segments out metric if enabled in configuration
+      if metricsConfig.counters.active and metricsConfig.counters.dataSegsOut.active:
+        result.add(MetricOutput(
+          name: "tcp_data_segs_out",
+          labels: @["flow"],
+          labelValues: @[flowLabel],
+          value: dataSegsOut.float,
+          timestamp: timestamp
+        ))
+      echo "DEBUG: completed processing flow ", processedFlows
+      processedFlows += 1
 
     # Add RTT histogram if enabled in configuration
     if metricsConfig.histograms.active and
@@ -377,13 +414,20 @@ proc preprocessMetricsWithConfig*(exporterConfig: config.ExporterConfig): seq[Me
 
 when defined(metrics):
   method collect(collector: SocketCollector, output: MetricHandler) =
+    echo "DEBUG: collect() method called"
     let timestamp = collector.now()
+    echo "DEBUG: got timestamp: ", timestamp
 
     # Preprocess all metrics with configuration respect
+    echo "DEBUG: calling preprocessMetricsWithConfig()"
     let metrics = preprocessMetricsWithConfig(collector.config)
+    echo "DEBUG: preprocessMetricsWithConfig returned, metrics count: ", metrics.len
 
     # Output all metrics
+    echo "DEBUG: starting to output metrics"
+    var metricIndex = 0
     for metric in metrics:
+      echo "DEBUG: processing metric ", metricIndex, ": ", metric.name
       output(
         name = metric.name,
         labels = metric.labels,
@@ -391,6 +435,8 @@ when defined(metrics):
         value = metric.value,
         timestamp = timestamp
       )
+      metricIndex += 1
+    echo "DEBUG: finished outputting all metrics"
 
 proc initSocketCollector*(config: config.ExporterConfig) =
   ## Initialize the global socket collector config and register collector

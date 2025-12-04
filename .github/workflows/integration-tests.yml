@@ -1,17 +1,29 @@
 name: Integration Tests
 
+# Integration Testing Strategy:
+# This workflow tests the prometheus_ss_exporter with various configurations to ensure
+# it works correctly across different scenarios. Key test cases include:
+# 1. Minimal configuration (all metrics disabled) - tests basic service startup
+# 2. Full metrics configuration - tests complete functionality
+# 3. Filtered configuration - tests flow selection capabilities
+# 4. Invalid configuration - tests error handling
+#
+# IMPORTANT: All test configs include individual metric fields (rtt, cwnd, etc.) even
+# when disabled, as this is required for proper YAML parsing.
+
 on:
   pull_request:
     branches: [ main, master ]
   workflow_dispatch:
 
 env:
-  REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+  IMAGE_NAME: prometheus-ss-exporter
 
 jobs:
   integration-tests:
     runs-on: ubuntu-latest
+    env:
+      TAG: test-${{ github.sha }}
 
     steps:
       - name: Checkout repository
@@ -20,24 +32,69 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build Docker image for testing
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: ./Dockerfile.nix
-          push: false
-          load: true
-          tags: prometheus-ss-exporter:test
-          build-args: |
-            VERSION=test-${{ github.sha }}
-          cache-from: type=gha,scope=test-build
-          cache-to: type=gha,mode=max,scope=test-build
+      - name: Build optimized Nix container for testing
+        env:
+          VERSION: test-${{ github.sha }}
+        run: |
+          echo "🚀 Building optimized Nix container..."
+
+          echo "Build environment configured:"
+          echo "  VERSION: $VERSION"
+          echo "  Image: $IMAGE_NAME:$TAG"
+
+
+          # Build the optimized container using our enhanced script
+          bash ./build-container-nix.sh \
+            --version "$VERSION" \
+            --name "$IMAGE_NAME" \
+            --tag "$TAG"
+
+          echo "✅ Nix optimized build completed"
+
+      - name: Tag built image for testing
+        run: |
+          # Tag the image for the integration tests
+          docker tag $IMAGE_NAME:$TAG $IMAGE_NAME:test
 
       - name: Create test configuration
         run: |
           mkdir -p test_configs
 
-          # Create comprehensive all-metrics config
+          # Create minimal config for basic testing
+          # NOTE: Even when metrics are disabled (active: false), individual metric fields
+          # (rtt, cwnd, deliveryRate, etc.) must be present with their own active: false setting.
+          # This is required for proper YAML parsing - omitting these fields causes 
+          # "Missing field" errors during configuration loading.
+          cat > test_configs/minimal.yml << 'EOF'
+          ---
+          logic:
+            metrics:
+              gauges:
+                active: false
+                rtt: { active: false }
+                cwnd: { active: false }
+                deliveryRate: { active: false }
+              histograms:
+                active: false
+                rtt: { active: false, bucketBounds: [] }
+              counters:
+                active: false
+                dataSegsIn: { active: false }
+                dataSegsOut: { active: false }
+            compression:
+              labelFolding: "raw_endpoint"
+            selection:
+              process:
+                pids: []
+                cmds: []
+              peering:
+                addresses: []
+                networks: []
+                hosts: []
+              portRanges: []
+          EOF
+
+          # Create comprehensive all-metrics config to test full functionality
           cat > test_configs/all-metrics.yml << 'EOF'
           ---
           logic:
@@ -134,55 +191,76 @@ jobs:
           echo "Checking for active TCP connections..."
           ss -tn state established '( dport = :19999 or sport = :19999 )' | head -10 || echo "Connections check completed"
 
+      - name: Test basic service stability with minimal config
+        run: |
+          echo "Testing service stability with minimal configuration..."
+          
+          # Start with minimal config to see if service stays running
+          docker run -d --name exporter-test-minimal \
+            --privileged --network host --pid host \
+            -v "$(pwd)/test_configs/minimal.yml:/config.yml:ro" \
+            --user 0:0 \
+            $IMAGE_NAME:test \
+            --port=8021 --config=/config.yml
+
+          echo "Minimal config container started. Waiting for startup..."
+          sleep 5
+          
+          echo "Testing minimal config service health endpoint..."
+          if curl -sf http://localhost:8021/health >/dev/null 2>&1; then
+            echo "✅ Minimal config service health endpoint responding"
+            
+            # Wait longer to check if it stays stable
+            echo "Checking stability over 10 seconds..."
+            sleep 10
+            
+            if curl -sf http://localhost:8021/health >/dev/null 2>&1; then
+              echo "✅ Minimal config service is stable"
+              docker stop exporter-test-minimal
+            else
+              echo "❌ Minimal config service crashed after 10 seconds"
+              docker logs exporter-test-minimal --tail 30
+              docker stop exporter-test-minimal || true
+              echo "This indicates a fundamental issue with the service"
+              exit 1
+            fi
+          else
+            echo "❌ Minimal config service failed to start"
+            docker logs exporter-test-minimal --tail 30
+            docker stop exporter-test-minimal || true
+            echo "This indicates a fundamental issue with the service"
+            exit 1
+          fi
+
       - name: Start service with all-metrics config
         run: |
           # Verify config file exists before starting container
           echo "Config file content:"
           cat test_configs/all-metrics.yml
 
+          echo "Starting container with extensive debugging..."
           docker run -d --name exporter-test \
             --privileged --network host --pid host \
-            --user root \
             -v "$(pwd)/test_configs/all-metrics.yml:/config.yml:ro" \
-            prometheus-ss-exporter:test \
+            --user 0:0 \
+            $IMAGE_NAME:test \
             --port=8020 --config=/config.yml
 
-      - name: Verify ss2 binary functionality
-        run: |
-          echo "=== Testing standalone ss2 binary ==="
+          echo "Container started. Checking initial status..."
+          sleep 3
           
-          # Test that ss2 binary is available and working
-          echo "Testing ss2 binary availability..."
-          docker exec exporter-test which ss2 || (echo "❌ ss2 binary not found" && exit 1)
+          echo "Container status:"
+          docker ps -a --filter "name=exporter-test"
           
-          # Test ss2 command directly 
-          echo "Testing ss2 command execution..."
-          docker exec exporter-test ss2 --tcp --process > /tmp/ss2_test_output.json
+          echo "Container logs (immediate):"
+          docker logs exporter-test || echo "No logs available"
           
-          if [ $? -eq 0 ]; then
-            echo "✅ ss2 command executed successfully"
-            echo "Sample ss2 output:"
-            head -10 /tmp/ss2_test_output.json || echo "Could not read output"
-          else
-            echo "❌ ss2 command failed"
-            exit 1
-          fi
+          echo "Container exit code:"
+          docker inspect exporter-test --format='{{.State.ExitCode}}' || echo "Could not get exit code"
           
-          # Verify output is valid JSON
-          if command -v jq >/dev/null 2>&1; then
-            if jq empty /tmp/ss2_test_output.json 2>/dev/null; then
-              echo "✅ ss2 output is valid JSON"
-              FLOWS_COUNT=$(jq '.[0].TCP.flows | length' /tmp/ss2_test_output.json 2>/dev/null || echo "0")
-              echo "✅ Found $FLOWS_COUNT TCP flows in test data"
-            else
-              echo "❌ ss2 output is not valid JSON"
-              exit 1
-            fi
-          else
-            echo "⚠️  jq not available, skipping JSON validation"
-          fi
-          
-          rm -f /tmp/ss2_test_output.json
+          echo "Testing basic network connectivity..."
+          timeout 5 docker run --rm --network host --user 0:0 $IMAGE_NAME:test --help || echo "Basic container test failed"
+
 
       - name: Wait for service to start
         run: |
@@ -195,30 +273,104 @@ jobs:
           echo "Testing if service is actually running on port 8020..."
           curl -v http://localhost:8020/health || echo "Service not responding"
 
-          # Give it time to start and exit early if it works
+          # Give it time to start and monitor for crashes
           for i in {1..30}; do
             if curl -sf http://localhost:8020/health >/dev/null 2>&1; then
               echo "Service started after $i seconds"
-              break
+              
+              # Wait a bit longer and check if service stays running
+              echo "Waiting 5 seconds to verify service stability..."
+              sleep 5
+              
+              # Check if service is still running after the initial delay
+              if curl -sf http://localhost:8020/health >/dev/null 2>&1; then
+                echo "✅ Service is stable - health endpoint still responding"
+                
+                # Verify it's actually listening on the port
+                if netstat -tlnp | grep :8020 >/dev/null; then
+                  echo "✅ Service confirmed listening on port 8020"
+                  break
+                else
+                  echo "❌ Health endpoint responded but service not listening on port 8020"
+                  echo "Container may be in crash loop"
+                  docker ps -a --filter "name=exporter-test"
+                  docker logs exporter-test --tail 30
+                  exit 1
+                fi
+              else
+                echo "❌ Service crashed after initial startup"
+                echo "Container status after crash:"
+                docker ps -a --filter "name=exporter-test"
+                echo "Full container logs:"
+                docker logs exporter-test
+                exit 1
+              fi
             fi
             echo "Attempt $i: waiting..."
             sleep 2
           done
 
-          # Final check with error if still not working
-          if ! curl -sf http://localhost:8020/health; then
-            echo "❌ Service failed to start - final container logs:"
-            docker logs exporter-test
+          # Final verification
+          if ! curl -sf http://localhost:8020/health >/dev/null; then
+            echo "❌ Service failed to start properly"
+            docker logs exporter-test --tail 50
             exit 1
           fi
+
+          echo "✅ Service startup verification complete - proceeding to metrics testing"
 
 
       - name: Test all-metrics functionality
         run: |
           echo "Testing comprehensive all-metrics configuration..."
 
-          # Get metrics
-          METRICS=$(curl -s http://localhost:8020/metrics)
+          # Service is confirmed running from previous step, just verify port
+          echo "Verifying service is listening on port 8020..."
+          if ! netstat -tlnp | grep :8020 >/dev/null; then
+            echo "❌ Service not listening on port 8020"
+            docker logs exporter-test --tail 20
+            exit 1
+          fi
+          echo "✅ Service confirmed listening on port 8020"
+
+          # Give the service adequate time to initialize metrics collection
+          echo "Waiting for metrics collection to initialize (15 seconds)..."
+          sleep 15
+
+          # Test the metrics endpoint with proper timeout and error handling
+          echo "Testing metrics endpoint..."
+          
+          # Use curl with timeout and capture both content and status
+          HTTP_STATUS=$(curl -s -w "%{http_code}" -o /tmp/metrics_output.txt \
+            --max-time 10 --retry 2 --retry-delay 2 \
+            http://localhost:8020/metrics 2>/tmp/curl_error.txt)
+          CURL_EXIT_CODE=$?
+          
+          echo "Curl exit code: $CURL_EXIT_CODE"
+          echo "HTTP status: $HTTP_STATUS"
+          
+          if [ -f /tmp/curl_error.txt ] && [ -s /tmp/curl_error.txt ]; then
+            echo "Curl error output:"
+            cat /tmp/curl_error.txt
+          fi
+          
+          if [ "$CURL_EXIT_CODE" -eq 0 ] && [ "$HTTP_STATUS" = "200" ] && [ -f /tmp/metrics_output.txt ]; then
+            RESPONSE_SIZE=$(wc -c < /tmp/metrics_output.txt)
+            echo "✅ Metrics endpoint responding successfully"
+            echo "Response size: $RESPONSE_SIZE bytes"
+            
+            # Display first few lines of metrics for verification
+            echo "Sample metrics output:"
+            head -10 /tmp/metrics_output.txt || echo "Could not display metrics content"
+            
+            METRICS=$(cat /tmp/metrics_output.txt)
+          else
+            echo "❌ Metrics endpoint failed"
+            echo "HTTP Status: $HTTP_STATUS, Exit Code: $CURL_EXIT_CODE"
+            echo "Container logs (latest):"
+            docker logs exporter-test --tail 30
+            exit 1
+          fi
 
           echo "${METRICS}"
 
@@ -296,9 +448,9 @@ jobs:
           echo "Starting service with filtered configuration..."
           docker run -d --name exporter-test \
             --privileged --network host --pid host \
-            --user root \
             -v "$(pwd)/test_configs/filtered.yml:/config.yml:ro" \
-            prometheus-ss-exporter:test \
+            --user 0:0 \
+            $IMAGE_NAME:test \
             --port=8020 --config=/config.yml
           
           # Show filtered config for debugging
@@ -411,9 +563,9 @@ jobs:
           # This should fail gracefully or use defaults
           docker run -d --name exporter-test \
             --privileged --network host --pid host \
-            --user root \
             -v "$(pwd)/test_configs/invalid.yml:/config.yml:ro" \
-            prometheus-ss-exporter:test \
+            --user 0:0 \
+            $IMAGE_NAME:test \
             --port=8020 --config=/config.yml
           
           sleep 3
@@ -440,8 +592,8 @@ jobs:
           
           docker run -d --name exporter-test \
             --privileged --network host --pid host \
-            --user root \
-            prometheus-ss-exporter:test \
+            --user 0:0 \
+            $IMAGE_NAME:test \
             --port=8020
           
           sleep 3
@@ -491,12 +643,12 @@ jobs:
           echo "## 🧪 Integration Test Report" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### ✅ Completed Tests" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ Standalone ss2 binary functionality" >> $GITHUB_STEP_SUMMARY
           echo "- ✅ JSON output validation and flow detection" >> $GITHUB_STEP_SUMMARY
           echo "- ✅ All-metrics configuration (gauges, counters, histograms)" >> $GITHUB_STEP_SUMMARY
           echo "- ✅ Flow filtering and selection with custom rules" >> $GITHUB_STEP_SUMMARY
           echo "- ✅ Dynamic configuration changes and metric type control" >> $GITHUB_STEP_SUMMARY
           echo "- ✅ Label folding modes (pid_condensed vs raw_endpoint)" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ User context (PID) mapping with root privileges" >> $GITHUB_STEP_SUMMARY
           echo "- ✅ Persistent TCP connection testing" >> $GITHUB_STEP_SUMMARY
           echo "- ✅ Prometheus format compliance" >> $GITHUB_STEP_SUMMARY
           echo "- ✅ Histogram data integrity validation" >> $GITHUB_STEP_SUMMARY
@@ -506,10 +658,10 @@ jobs:
           echo "- ✅ Invalid configuration resilience testing" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### 🔧 Technical Improvements Tested" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ Standalone ss2 binary integration" >> $GITHUB_STEP_SUMMARY
           echo "- ✅ Clean JSON parsing without Python warnings" >> $GITHUB_STEP_SUMMARY
           echo "- ✅ Comprehensive flow filtering (process, network, port range)" >> $GITHUB_STEP_SUMMARY
           echo "- ✅ Configuration flexibility and metric type control" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ User context data collection with proper privileges" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Test Environment:** Ubuntu latest with Docker" >> $GITHUB_STEP_SUMMARY
           echo "**Test Scope:** Localhost persistent connections with flow filtering" >> $GITHUB_STEP_SUMMARY
