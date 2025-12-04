@@ -332,6 +332,7 @@ execute_build() {
         -v "$(pwd):/source" \
         -v "$(pwd):/output" \
         -e "VERSION=$VERSION" \
+        -e "IMAGE_NAME=$IMAGE_NAME" \
         -e "BUILD_CORES=$CORES" \
         -e "NIX_FILE=/source/$NIX_FILE" \
         -e "CI_ENV=false" \

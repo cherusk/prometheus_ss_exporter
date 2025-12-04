@@ -1,4 +1,4 @@
-{ pkgs ? import <nixpkgs> {}, version ? builtins.getEnv "VERSION" }:
+{ pkgs ? import <nixpkgs> {}, version ? builtins.getEnv "VERSION", imageName ? builtins.getEnv "IMAGE_NAME" }:
 
 let
   # Python runtime dependencies only
