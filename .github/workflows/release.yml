@@ -12,8 +12,8 @@ on:
         type: string
 
 env:
-  REGISTRY: ghcr.io
-  IMAGE_NAME: prometheus-ss-exporter
+  REGISTRY: ghcr.io/cherusk
+  IMAGE_NAME: prometheus_ss_exporter
 
 jobs:
   # Pre-release validation step
