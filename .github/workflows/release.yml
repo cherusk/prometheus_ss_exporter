@@ -62,20 +62,6 @@ jobs:
           echo "✅ Release validation passed for version: $VERSION"
           echo "📋 Latest tag: $IS_LATEST"
 
-  # Security validation step
-  security-validation:
-    runs-on: ubuntu-latest
-    needs: validate-release
-    if: needs.validate-release.outputs.should-proceed == 'true'
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Validate security configuration
-        run: |
-          echo "✅ Security validation passed"
-          echo "Final image will be scanned after build"
-
   # Main build and push job with enhanced security and caching
   build-and-push-image:
     runs-on: ubuntu-latest
@@ -110,7 +96,7 @@ jobs:
         run: |
           echo "🏗️ Setting up Nix container build system for release..."
           chmod +x ./build-container-nix.sh
-          
+
           echo "Release build environment configured:"
           echo "  Version: $VERSION"
           echo "  Image: $IMAGE_NAME"
@@ -118,12 +104,12 @@ jobs:
       - name: Build optimized Nix container for release
         run: |
           echo "🚀 Building optimized Nix container for release..."
-          
+
           # Build the optimized container using our enhanced script
           bash ./build-container-nix.sh \
             --version "$VERSION" \
             --name "$IMAGE_NAME"
-          
+
           echo "✅ Nix optimized build completed"
 
       - name: Log in to Container Registry
@@ -132,6 +118,19 @@ jobs:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push optimized image to registry for metadata wrapper
+        run: |
+          echo "📤 Pushing optimized image to registry for metadata wrapper..."
+          
+          # Tag the locally built image for the registry
+          docker tag ${{ env.IMAGE_NAME }}:${{ env.VERSION }} ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.VERSION }}
+          
+          # Push to make it available for the metadata wrapper step
+          docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.VERSION }}
+          
+          echo "✅ Optimized image pushed to ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.VERSION }}"
+          echo "🐳 Now available for metadata wrapper to use as base image"
 
       - name: Extract comprehensive metadata for Docker
         id: meta
@@ -173,7 +172,7 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           
-          # Use our already-built Nix image as the base
+          # Use our already-built Nix image as the base (now available in registry)
           # This creates a new layer that just adds the metadata/labels
           build-args: |
             BASE_IMAGE=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.VERSION }}
