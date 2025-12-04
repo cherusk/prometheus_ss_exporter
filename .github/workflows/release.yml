@@ -183,7 +183,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=release-build
           
           # Security scanning
-          provenance true
+          provenance: true
 
       - name: Scan final image for vulnerabilities
         uses: aquasecurity/trivy-action@master
