@@ -271,13 +271,15 @@ proc preprocessMetricsWithConfig*(exporterConfig: config.ExporterConfig): seq[Me
       # Round Trip Time - GAUGE
       let rtt = tcpInfo.rtt
 
-      result.add(MetricOutput(
-        name: "tcp_rtt",
-        labels: @["flow"],
-        labelValues: @[flowLabel],
-        value: rtt,
-        timestamp: timestamp
-      ))
+      # Only add RTT metric if enabled in configuration
+      if metricsConfig.gauges.active and metricsConfig.gauges.rtt.active:
+        result.add(MetricOutput(
+          name: "tcp_rtt",
+          labels: @["flow"],
+          labelValues: @[flowLabel],
+          value: rtt,
+          timestamp: timestamp
+        ))
 
       # Add RTT value to histogram collection
       rttValues.add(rtt)
@@ -285,17 +287,20 @@ proc preprocessMetricsWithConfig*(exporterConfig: config.ExporterConfig): seq[Me
       # Congestion Window - GAUGE
       let sndCwnd = tcpInfo.sndCwnd
 
-      result.add(MetricOutput(
-        name: "tcp_cwnd",
-        labels: @["flow"],
-        labelValues: @[flowLabel],
-        value: sndCwnd.float,
-        timestamp: timestamp
-      ))
+      # Only add congestion window metric if enabled in configuration
+      if metricsConfig.gauges.active and metricsConfig.gauges.cwnd.active:
+        result.add(MetricOutput(
+          name: "tcp_cwnd",
+          labels: @["flow"],
+          labelValues: @[flowLabel],
+          value: sndCwnd.float,
+          timestamp: timestamp
+        ))
 
       # Delivery Rate - GAUGE
       let deliveryRate = tcpInfo.deliveryRate
-      if deliveryRate > 0:
+      if deliveryRate > 0 and
+         metricsConfig.gauges.active and metricsConfig.gauges.deliveryRate.active:
         result.add(MetricOutput(
           name: "tcp_delivery_rate",
           labels: @["flow"],
@@ -308,21 +313,25 @@ proc preprocessMetricsWithConfig*(exporterConfig: config.ExporterConfig): seq[Me
       let dataSegsIn = tcpInfo.dataSegsIn
       let dataSegsOut = tcpInfo.dataSegsOut
 
-      result.add(MetricOutput(
-        name: "tcp_data_segs_in",
-        labels: @["flow"],
-        labelValues: @[flowLabel],
-        value: dataSegsIn.float,
-        timestamp: timestamp
-      ))
+      # Only add data segments in metric if enabled in configuration
+      if metricsConfig.counters.active and metricsConfig.counters.dataSegsIn.active:
+        result.add(MetricOutput(
+          name: "tcp_data_segs_in",
+          labels: @["flow"],
+          labelValues: @[flowLabel],
+          value: dataSegsIn.float,
+          timestamp: timestamp
+        ))
 
-      result.add(MetricOutput(
-        name: "tcp_data_segs_out",
-        labels: @["flow"],
-        labelValues: @[flowLabel],
-        value: dataSegsOut.float,
-        timestamp: timestamp
-      ))
+      # Only add data segments out metric if enabled in configuration
+      if metricsConfig.counters.active and metricsConfig.counters.dataSegsOut.active:
+        result.add(MetricOutput(
+          name: "tcp_data_segs_out",
+          labels: @["flow"],
+          labelValues: @[flowLabel],
+          value: dataSegsOut.float,
+          timestamp: timestamp
+        ))
       echo "DEBUG: completed processing flow ", processedFlows
       processedFlows += 1
 
