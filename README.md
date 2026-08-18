@@ -1,3 +1,5 @@
+
+
 # Prometheus Socket Statistics Exporter
 
 [![Docker Image](https://img.shields.io/badge/docker-ready-blue.svg)](https://ghcr.io/cherusk/prometheus_ss_exporter)
@@ -410,7 +412,7 @@ services:
     restart: unless-stopped
     ports:
       - "8020:8020"
-    command: ["./prometheus_ss_exporter", "--port=8020", "--config=/config.yml"]
+    command: ["--port=8020", "--config=/config.yml"]
     volumes:
       - ./config.yml:/config.yml:ro
     healthcheck:
