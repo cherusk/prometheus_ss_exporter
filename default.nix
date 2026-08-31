@@ -53,12 +53,6 @@ let
       nimble install --depsOnly
       nimble build -v -d:release -d:metrics --threads:on -d:version="$BUILD_VERSION"
       
-      # Build ss2 tool if available
-      if [ -d "ss2" ]; then
-        cd ss2
-        make
-        cd ..
-      fi
     '';
     
     installPhase = ''
@@ -72,11 +66,6 @@ let
       else
         echo "Binary not found!"
         exit 1
-      fi
-      
-      # Install ss2 tool if built
-      if [ -f "ss2/ss2" ]; then
-        cp ss2/ss2 $out/bin/
       fi
       
       # Make binaries executable
